@@ -1,60 +1,53 @@
-"""Immutable artifact publication and completion-marker validation."""
+"""Immutable, content-addressed directory artifacts."""
 
 from __future__ import annotations
 
-import hashlib
 import json
 import shutil
 import uuid
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from particleml.contracts import SHA256_PATTERN, Artifact, IntegrityError
+from .contracts import canonical_json_bytes, require_sha256, sha256_document, sha256_file
 
-COMPLETION_FILENAME = "COMPLETED.json"
-
-
-def _canonical_json(value: object) -> bytes:
-    return (
-        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
-    ).encode("utf-8")
+COMPLETION_FILENAME = "completion.json"
 
 
-def _validate_hashes(input_hashes: Mapping[str, str], config_sha256: str) -> None:
-    if not SHA256_PATTERN.fullmatch(config_sha256):
-        raise IntegrityError("ARTIFACT_HASH_FORMAT", "config_sha256 is invalid")
-    for name, digest in input_hashes.items():
-        if not name or not SHA256_PATTERN.fullmatch(digest):
-            raise IntegrityError("ARTIFACT_HASH_FORMAT", f"invalid input hash: {name}")
+class IntegrityError(RuntimeError):
+    """Raised when an artifact cannot be trusted or atomically published."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
+        self.message = message
 
 
-def _payload_records(directory: Path) -> list[dict[str, object]]:
-    records: list[dict[str, object]] = []
-    paths = sorted(
-        directory.rglob("*"), key=lambda item: item.relative_to(directory).as_posix()
-    )
-    for path in paths:
-        if path.is_symlink():
-            raise IntegrityError("ARTIFACT_SYMLINK", f"symlink payload is forbidden: {path}")
-        if not path.is_file() or path.name == COMPLETION_FILENAME:
-            continue
-        payload = path.read_bytes()
-        records.append(
-            {
-                "path": path.relative_to(directory).as_posix(),
-                "sha256": hashlib.sha256(payload).hexdigest(),
-                "byte_size": len(payload),
-            }
-        )
+@dataclass(frozen=True)
+class Artifact:
+    """Published artifact identity."""
+
+    path: Path
+    sha256: str
+    schema_version: str = "2.0.0"
+
+
+def _payload_records(directory: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for path in sorted(directory.rglob("*")):
+        if path.is_file() and path.name != COMPLETION_FILENAME:
+            records.append(
+                {
+                    "path": path.relative_to(directory).as_posix(),
+                    "size_bytes": path.stat().st_size,
+                    "sha256": sha256_file(path),
+                }
+            )
     if not records:
-        raise IntegrityError("ARTIFACT_EMPTY", "artifact has no payload files")
+        raise IntegrityError("ARTIFACT_EMPTY", "artifact contains no payload files")
     return records
-
-
-def _artifact_hash(records: list[dict[str, object]]) -> str:
-    return hashlib.sha256(_canonical_json(records)).hexdigest()
 
 
 def publish_artifact(
@@ -65,102 +58,61 @@ def publish_artifact(
     config_sha256: str,
     writer_version: str,
 ) -> Artifact:
-    """Write, validate, hash, publish, and mark one immutable directory artifact."""
+    """Write, validate, hash, atomically publish, and complete one artifact."""
 
-    _validate_hashes(input_hashes, config_sha256)
+    for label, value in input_hashes.items():
+        try:
+            require_sha256(value, label)
+        except ValueError as exc:
+            raise IntegrityError("ARTIFACT_INPUT_HASH", str(exc)) from exc
+    try:
+        require_sha256(config_sha256, "config_sha256")
+    except ValueError as exc:
+        raise IntegrityError("ARTIFACT_CONFIG_HASH", str(exc)) from exc
     if not writer_version:
-        raise IntegrityError("ARTIFACT_WRITER_VERSION", "writer_version must not be empty")
-    final.parent.mkdir(parents=True, exist_ok=True)
+        raise IntegrityError("ARTIFACT_WRITER_VERSION", "writer version must not be empty")
     if final.exists():
         raise IntegrityError("ARTIFACT_EXISTS", f"formal output already exists: {final}")
-    partial = final.with_name(f"{final.name}.partial.{uuid.uuid4()}")
+    final.parent.mkdir(parents=True, exist_ok=True)
+    partial = final.with_name(f"{final.name}.partial.{uuid.uuid4().hex}")
     partial.mkdir()
     published = False
     try:
         writer(partial)
         validator(partial)
-        records = _payload_records(partial)
-        digest = _artifact_hash(records)
-        partial.rename(final)
-        published = True
+        payloads = _payload_records(partial)
+        artifact_hash = sha256_document(payloads)
         marker = {
-            "schema_version": "1.0.0",
+            "schema_version": "2.0.0",
             "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "writer_version": writer_version,
             "input_hashes": dict(sorted(input_hashes.items())),
             "config_sha256": config_sha256,
-            "payloads": records,
-            "artifact_sha256": digest,
+            "payloads": payloads,
+            "artifact_sha256": artifact_hash,
         }
-        (final / COMPLETION_FILENAME).write_bytes(_canonical_json(marker))
-        return Artifact(final, digest, "1.0.0")
+        (partial / COMPLETION_FILENAME).write_bytes(canonical_json_bytes(marker))
+        partial.rename(final)
+        published = True
+        return Artifact(final, artifact_hash)
     finally:
         if not published and partial.exists():
-            try:
-                shutil.rmtree(partial)
-            except OSError:
-                pass
+            shutil.rmtree(partial, ignore_errors=True)
 
 
-def _load_marker(final: Path) -> dict[str, Any]:
-    marker_path = final / COMPLETION_FILENAME
-    if not final.is_dir() or not marker_path.is_file():
-        raise IntegrityError("ARTIFACT_INCOMPLETE", f"missing authoritative marker: {marker_path}")
-    try:
-        marker = json.loads(marker_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise IntegrityError("ARTIFACT_INCOMPLETE", f"invalid completion marker: {exc}") from exc
-    if not isinstance(marker, dict):
-        raise IntegrityError("ARTIFACT_INCOMPLETE", "completion marker must be an object")
-    return marker
+def verify_artifact(path: Path) -> Artifact:
+    """Recompute every payload digest and the aggregate completion hash."""
 
-
-def resume_artifact(
-    final: Path,
-    input_hashes: Mapping[str, str],
-    config_sha256: str,
-) -> Artifact:
-    """Reuse a completed artifact only when request and payload hashes still match."""
-
-    _validate_hashes(input_hashes, config_sha256)
-    marker = _load_marker(final)
-    if marker.get("input_hashes") != dict(sorted(input_hashes.items())) or marker.get(
-        "config_sha256"
-    ) != config_sha256:
-        raise IntegrityError("ARTIFACT_RESUME_MISMATCH", "input or configuration hashes differ")
-    records = _payload_records(final)
-    digest = _artifact_hash(records)
-    if marker.get("payloads") != records or marker.get("artifact_sha256") != digest:
-        raise IntegrityError(
-            "ARTIFACT_HASH_MISMATCH",
-            "published payload does not match completion marker",
-        )
-    return Artifact(final, digest, str(marker.get("schema_version", "1.0.0")))
-
-
-def verify_artifact(final: Path) -> Artifact:
-    """Validate a published directory marker and every retained payload hash."""
-
-    marker = _load_marker(final)
-    records = _payload_records(final)
-    digest = _artifact_hash(records)
-    if marker.get("payloads") != records or marker.get("artifact_sha256") != digest:
-        raise IntegrityError(
-            "ARTIFACT_HASH_MISMATCH",
-            "published payload does not match completion marker",
-        )
-    return Artifact(final, digest, str(marker.get("schema_version", "1.0.0")))
-
-
-def verify_artifact_payload(path: Path) -> Artifact:
-    """Validate the completed directory that authoritatively contains one payload file."""
-
-    artifact = verify_artifact(path.parent)
-    relative = path.relative_to(path.parent).as_posix()
-    marker = _load_marker(path.parent)
-    payloads = marker.get("payloads")
-    if not isinstance(payloads, list) or relative not in {
-        record.get("path") for record in payloads if isinstance(record, dict)
-    }:
-        raise IntegrityError("ARTIFACT_INCOMPLETE", f"payload is absent from marker: {path}")
-    return artifact
+    marker_path = path / COMPLETION_FILENAME
+    if not marker_path.is_file():
+        raise IntegrityError("ARTIFACT_INCOMPLETE", f"missing {marker_path}")
+    marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    if marker.get("schema_version") != "2.0.0":
+        raise IntegrityError("ARTIFACT_VERSION", "unsupported completion record version")
+    actual = _payload_records(path)
+    if actual != marker.get("payloads"):
+        raise IntegrityError("ARTIFACT_PAYLOAD", "payload list or digest does not match")
+    digest = sha256_document(actual)
+    if digest != marker.get("artifact_sha256"):
+        raise IntegrityError("ARTIFACT_HASH", "aggregate artifact hash does not match")
+    return Artifact(path, digest)
