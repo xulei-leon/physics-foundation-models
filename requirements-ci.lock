@@ -16,6 +16,8 @@ build==1.5.0
     # via particleml-research (pyproject.toml)
 certifi==2026.7.22
     # via httpx
+click==8.4.2
+    # via pyhf
 colorama==0.4.6 ; os_name == 'nt' or sys_platform == 'win32'
     # via
     #   build
@@ -50,6 +52,10 @@ iniconfig==2.3.0
     # via pytest
 jsonschema==4.26.0
     # via particleml-research (pyproject.toml)
+jsonpatch==1.33
+    # via pyhf
+jsonpointer==3.1.1
+    # via jsonpatch
 jsonschema-specifications==2025.9.1
     # via jsonschema
 joblib==1.5.3
@@ -86,6 +92,8 @@ pluggy==1.6.0
     #   hatchling
     #   pytest
 pyarrow==21.0.0
+    # via particleml-research (pyproject.toml)
+pyhf==0.7.6
     # via particleml-research (pyproject.toml)
 pygments==2.20.0
     # via pytest
@@ -131,6 +139,8 @@ tomli==2.4.1 ; python_full_version < '3.11'
     #   pytest
 threadpoolctl==3.6.0
     # via scikit-learn
+tqdm==4.69.1
+    # via pyhf
 trove-classifiers==2026.6.1.19
     # via hatchling
 types-jsonschema==4.26.0.20260518

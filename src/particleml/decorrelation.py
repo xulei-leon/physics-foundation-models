@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
@@ -50,6 +50,57 @@ class DDTCalibrator:
     mass_max: float
     initial_width: float
     minimum_effective_events: float
+
+    def to_document(self) -> dict[str, object]:
+        """Serialize the fitted calibration without executable state."""
+
+        return {
+            "schema_version": "2.0.0",
+            "mass_min": self.mass_min,
+            "mass_max": self.mass_max,
+            "initial_width": self.initial_width,
+            "minimum_effective_events": self.minimum_effective_events,
+            "bins": [
+                {
+                    "channel": item.channel,
+                    "low": item.low,
+                    "high": item.high,
+                    "score_knots": item.score_knots.tolist(),
+                    "cdf_knots": item.cdf_knots.tolist(),
+                    "n_eff": item.n_eff,
+                }
+                for item in self.bins
+            ],
+        }
+
+    @classmethod
+    def from_document(cls, document: dict[str, object]) -> DDTCalibrator:
+        """Restore a serialized calibration with structural checks."""
+
+        raw_bins = document.get("bins")
+        if document.get("schema_version") != "2.0.0" or not isinstance(raw_bins, list):
+            raise ContractError("DDT_DOCUMENT", "invalid DDT calibration document")
+        bins: list[ConditionalCDFBin] = []
+        for raw in raw_bins:
+            if not isinstance(raw, dict):
+                raise ContractError("DDT_DOCUMENT", "DDT bin must be an object")
+            bins.append(
+                ConditionalCDFBin(
+                    str(raw["channel"]),
+                    float(raw["low"]),
+                    float(raw["high"]),
+                    np.asarray(raw["score_knots"], dtype=np.float64),
+                    np.asarray(raw["cdf_knots"], dtype=np.float64),
+                    float(raw["n_eff"]),
+                )
+            )
+        return cls(
+            tuple(bins),
+            float(cast(Any, document["mass_min"])),
+            float(cast(Any, document["mass_max"])),
+            float(cast(Any, document["initial_width"])),
+            float(cast(Any, document["minimum_effective_events"])),
+        )
 
     @classmethod
     def fit(

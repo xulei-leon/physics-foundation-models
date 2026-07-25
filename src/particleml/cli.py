@@ -1,244 +1,527 @@
-"""Thin command-line entry point for particleML."""
+"""Breaking particleML v2 command-line interface."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn, cast
 
-from particleml.audit import build_data_audit
-from particleml.contracts import (
-    ConfigurationError,
-    FeatureConfig,
-    ParticleMLError,
-    validate_contract,
+import numpy as np
+import pandas as pd  # type: ignore[import-untyped]
+
+from .artifacts import Artifact, IntegrityError, publish_artifact, verify_artifact
+from .blinding import authorize_observed_fit, create_freeze_document, publish_freeze
+from .catalog import download_https, validate_catalog
+from .config import config_sha256, load_config
+from .contracts import (
+    ContractError,
+    canonical_json_bytes,
+    load_json,
+    sha256_file,
+    validate_document,
+    validate_schema_suite,
 )
-from particleml.dataset import convert_compact_root
-from particleml.e0 import build_e0_audit
-from particleml.experiment import dry_run_ledger, resolve_matrix
-from particleml.manifest import build_split_manifest, hash_source_manifest, load_source_manifest
-from particleml.metrics import evaluate_binary_predictions, validate_prediction_payload
-from particleml.model_integration import aggregate_e05, build_index_argv, validate_checkpoint
-from particleml.reporting import build_report
-from particleml.views import materialize_view
+from .dataset import audit_frame, load_dataset
+from .decorrelation import DDTCalibrator, ddt_category, evaluate_decorrelation_gates
+from .evaluation import weighted_metrics
+from .inference import build_templates, build_workspace, fit_workspace, spurious_signal_sigma
+from .ingestion import SourceDescriptor, ingest_sources, publish_canonical_dataset
+from .models import MODEL_NAMES, train_seeded_predictions
+from .physics import PhysicsError, selection_from_config
+from .reporting import build_blinded_report
 
 
-class _Parser(argparse.ArgumentParser):
-    """Argument parser that keeps syntax errors inside the reusable CLI boundary."""
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-    def error(self, message: str) -> NoReturn:
-        raise ConfigurationError("CLI_USAGE", message)
+
+def _git_commit() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def _json(path: Path) -> dict[str, Any]:
+    return load_json(path)
+
+
+def _write_json(path: Path, document: Mapping[str, Any]) -> None:
+    if path.exists():
+        raise ContractError("OUTPUT_EXISTS", f"output already exists: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_name(f"{path.name}.partial")
+    try:
+        partial.write_bytes(canonical_json_bytes(document))
+        partial.rename(path)
+    finally:
+        if partial.exists():
+            partial.unlink()
+
+
+def _catalog_validate(args: argparse.Namespace) -> None:
+    load_config(args.config, "catalog-sources")
+    catalog = _json(args.catalog)
+    validate_catalog(catalog)
+    print(sha256_file(args.catalog))
+
+
+def _dataset_build(args: argparse.Namespace) -> None:
+    config = load_config(args.config, "analysis")
+    catalog = _json(args.catalog)
+    validate_catalog(catalog)
+    sources: list[tuple[Path, SourceDescriptor]] = []
+    args.cache.mkdir(parents=True, exist_ok=True)
+    for item in catalog["files"]:
+        checksum = str(item["sha256"])
+        cached = args.cache / f"{checksum}.root"
+        if not cached.exists():
+            download_https(str(item["url"]), cached, checksum)
+        source = SourceDescriptor(
+            dataset_id=str(item["dataset_id"]),
+            file_checksum=checksum,
+            is_data=bool(item["is_data"]),
+            process_group=str(item["process_group"]),
+            xsec_pb=None if bool(item["is_data"]) else float(item["xsec_pb"]),
+            kfactor=None if bool(item["is_data"]) else float(item["kfactor"]),
+            filter_efficiency=(
+                None if bool(item["is_data"]) else float(item["filter_efficiency"])
+            ),
+            sum_of_generator_weights=(
+                None
+                if bool(item["is_data"])
+                else float(item["sum_of_generator_weights"])
+            ),
+        )
+        sources.append((cached, source))
+    rows = ingest_sources(
+        sources,
+        selection_from_config(config),
+        float(config["luminosity_pb"]),
+        tree_name=args.tree,
+        chunk_size=args.chunk_size,
+    )
+    publish_canonical_dataset(
+        rows,
+        args.output,
+        str(config["analysis_id"]),
+        sha256_file(args.catalog),
+        config_sha256(config),
+    )
+
+
+def _audit_data(args: argparse.Namespace) -> None:
+    frame, _ = load_dataset(args.dataset)
+    print(json.dumps(audit_frame(frame), sort_keys=True))
+
+
+def _training_writer(
+    final: Path,
+    frame: pd.DataFrame,
+    config: Mapping[str, Any],
+    model_name: str,
+    dataset_artifact: Artifact,
+    parsed_command: Sequence[str],
+) -> Artifact:
+    seeded, ensemble, features = train_seeded_predictions(frame, config, model_name)
+    config_hash = config_sha256(config)
+
+    def writer(partial: Path) -> None:
+        for seed, prediction in seeded.items():
+            prediction.to_parquet(partial / f"predictions-seed-{seed}.parquet", index=False)
+        ensemble_path = partial / "predictions-ensemble.parquet"
+        ensemble.to_parquet(ensemble_path, index=False)
+        (partial / "model-input-fields.json").write_bytes(
+            canonical_json_bytes({"fields": list(features.fields), "sha256": features.sha256})
+        )
+        run_record = {
+            "schema_version": "2.0.0",
+            "run_id": f"{model_name}-{features.sha256[:12]}",
+            "command": list(parsed_command),
+            "started_at": _now(),
+            "completed_at": _now(),
+            "status": "completed",
+            "config_sha256": config_hash,
+            "input_artifacts": {"dataset": dataset_artifact.sha256},
+            "software": {
+                "particleml_version": "0.2.0",
+                "python_version": sys.version.split()[0],
+                "git_commit": _git_commit(),
+            },
+            "model_input_fields": list(features.fields),
+            "model_input_sha256": features.sha256,
+            "error": None,
+        }
+        validate_document(run_record, "run-record")
+        run_path = partial / "run-record.json"
+        run_path.write_bytes(canonical_json_bytes(run_record))
+        metadata = {
+            "schema_version": "2.0.0",
+            "run_record_sha256": sha256_file(run_path),
+            "dataset_manifest_sha256": sha256_file(
+                dataset_artifact.path / "dataset-manifest.json"
+            ),
+            "model_name": model_name,
+            "seed_or_ensemble": "ensemble",
+            "row_count": len(ensemble),
+            "payload_fields": [
+                "event_id",
+                "target",
+                "w_yield",
+                "raw_score",
+                "ddt_score",
+                "channel",
+                "m4l",
+                "model_name",
+                "seed_or_ensemble",
+            ],
+            "payload_sha256": sha256_file(ensemble_path),
+        }
+        validate_document(metadata, "prediction-metadata")
+        (partial / "prediction-metadata.json").write_bytes(canonical_json_bytes(metadata))
+
+    def validator(partial: Path) -> None:
+        validate_document(_json(partial / "run-record.json"), "run-record")
+        validate_document(
+            _json(partial / "prediction-metadata.json"), "prediction-metadata"
+        )
+        stored = pd.read_parquet(partial / "predictions-ensemble.parquet")
+        if stored["event_id"].duplicated().any() or len(stored) != len(frame):
+            raise ContractError("PREDICTION_ALIGNMENT", "stored predictions are misaligned")
+
+    return publish_artifact(
+        final,
+        writer,
+        validator,
+        {"dataset": dataset_artifact.sha256},
+        config_hash,
+        "particleml-0.2.0",
+    )
+
+
+def _run_train(args: argparse.Namespace) -> None:
+    config = load_config(args.config, "analysis")
+    dataset_artifact = verify_artifact(args.dataset)
+    frame, _ = load_dataset(args.dataset)
+    _training_writer(
+        args.output,
+        frame,
+        config,
+        args.model,
+        dataset_artifact,
+        ["particleml", "run", "train", "--model", args.model],
+    )
+
+
+def _decorrelate(args: argparse.Namespace) -> None:
+    config = load_config(args.config, "analysis")
+    prediction_artifact = verify_artifact(args.predictions)
+    frame = pd.read_parquet(args.predictions / "predictions-ensemble.parquet")
+    calibration = frame[
+        (~frame["is_data"].astype(bool))
+        & (frame["target"] == 0)
+        & (frame["split"] == "calibration")
+    ].copy()
+    ddt = cast(Mapping[str, Any], config["ddt"])
+    calibrator = DDTCalibrator.fit_from_frame(
+        calibration,
+        minimum_effective_events=float(ddt["minimum_effective_events"]),
+        initial_width=float(ddt["initial_bin_width_gev"]),
+    )
+    transformed = frame.copy()
+    transformed["ddt_score"] = calibrator.transform(
+        np.asarray(frame["raw_score"], dtype=np.float64),
+        np.asarray(frame["m4l"], dtype=np.float64),
+        np.asarray(frame["channel"].astype(str), dtype=np.str_),
+    )
+    transformed["ddt_category"] = [
+        ddt_category(float(value), float(ddt["threshold"]))
+        for value in transformed["ddt_score"]
+    ]
+    config_hash = config_sha256(config)
+
+    def writer(partial: Path) -> None:
+        transformed.to_parquet(partial / "predictions-ddt.parquet", index=False)
+        (partial / "ddt-calibration.json").write_bytes(
+            canonical_json_bytes(calibrator.to_document())
+        )
+
+    def validator(partial: Path) -> None:
+        stored = pd.read_parquet(partial / "predictions-ddt.parquet")
+        if not stored["ddt_score"].between(0.0, 1.0).all():
+            raise ContractError("DDT_SCORE_RANGE", "stored DDT scores are outside [0, 1]")
+        DDTCalibrator.from_document(_json(partial / "ddt-calibration.json"))
+
+    publish_artifact(
+        args.output,
+        writer,
+        validator,
+        {"predictions": prediction_artifact.sha256},
+        config_hash,
+        "particleml-0.2.0",
+    )
+
+
+def _evaluate(args: argparse.Namespace) -> None:
+    config = load_config(args.config, "analysis")
+    prediction_artifact = verify_artifact(args.predictions)
+    frame = pd.read_parquet(args.predictions / "predictions-ddt.parquet")
+    test = frame[(~frame["is_data"].astype(bool)) & (frame["split"] == "test")]
+    metrics = weighted_metrics(
+        np.asarray(test["target"], dtype=np.int64),
+        np.asarray(test["raw_score"], dtype=np.float64),
+        np.asarray(test["w_yield"], dtype=np.float64),
+    )
+    background = frame[
+        (~frame["is_data"].astype(bool))
+        & (frame["target"] == 0)
+        & (frame["split"] == "test")
+    ]
+    data = frame[frame["is_data"].astype(bool)]
+    sideband = data[
+        ((data["m4l"] >= 105.0) & (data["m4l"] < 120.0))
+        | ((data["m4l"] >= 130.0) & (data["m4l"] < 160.0))
+    ]
+    gates = evaluate_decorrelation_gates(background, sideband, args.spurious_signal_sigma)
+    config_hash = config_sha256(config)
+
+    def writer(partial: Path) -> None:
+        (partial / "metrics.json").write_bytes(canonical_json_bytes(metrics))
+        (partial / "gates.json").write_bytes(canonical_json_bytes(gates))
+
+    def validator(partial: Path) -> None:
+        _json(partial / "gates.json")
+
+    publish_artifact(
+        args.output,
+        writer,
+        validator,
+        {"predictions": prediction_artifact.sha256},
+        config_hash,
+        "particleml-0.2.0",
+    )
+
+
+def _fit_expected(args: argparse.Namespace) -> None:
+    config = load_config(args.config, "analysis")
+    prediction_artifact = verify_artifact(args.predictions)
+    frame = pd.read_parquet(args.predictions / "predictions-ddt.parquet")
+    templates = build_templates(frame)
+    fit_config = cast(Mapping[str, Any], config["fit"])
+    workspace = build_workspace(
+        templates,
+        float(fit_config["luminosity_uncertainty"]),
+        float(fit_config["signal_theory_uncertainty"]),
+        float(fit_config["irreducible_background_uncertainty"]),
+        float(fit_config["reducible_background_uncertainty"]),
+    )
+    result = fit_workspace(workspace, "expected")
+    spurious = spurious_signal_sigma(workspace)
+    summary = {"spurious_signal_sigma": spurious, "passed": spurious < 0.2}
+    config_hash = config_sha256(config)
+
+    def writer(partial: Path) -> None:
+        (partial / "templates.json").write_bytes(canonical_json_bytes(templates))
+        (partial / "workspace.json").write_bytes(canonical_json_bytes(workspace))
+        (partial / "fit-result.json").write_bytes(canonical_json_bytes(result))
+        (partial / "fit-summary.json").write_bytes(canonical_json_bytes(summary))
+
+    def validator(partial: Path) -> None:
+        validate_document(_json(partial / "fit-result.json"), "fit-result")
+        _json(partial / "workspace.json")
+
+    publish_artifact(
+        args.output,
+        writer,
+        validator,
+        {"predictions": prediction_artifact.sha256},
+        config_hash,
+        "particleml-0.2.0",
+    )
+
+
+def _analysis_freeze(args: argparse.Namespace) -> None:
+    config = load_config(args.config, "analysis")
+    root = args.inputs
+    catalog_path = root / "catalog.json"
+    dataset = verify_artifact(root / "dataset")
+    predictions = verify_artifact(root / "ddt")
+    fit = verify_artifact(root / "expected-fit")
+    evaluation = verify_artifact(root / "evaluation")
+    gates = _json(evaluation.path / "gates.json")
+    fit_summary = _json(fit.path / "fit-summary.json")
+    spurious = float(fit_summary["spurious_signal_sigma"])
+    gates["spurious_signal"] = {"value_sigma": spurious, "passed": spurious < 0.2}
+    gates["all_passed"] = all(
+        cast(Mapping[str, Any], gates[name]).get("passed") is True
+        for name in (
+            "mc_spearman",
+            "data_sideband_spearman",
+            "sideband_acceptance",
+            "spurious_signal",
+        )
+    )
+    hashes = {
+        "config_sha256": config_sha256(config),
+        "catalog_sha256": sha256_file(catalog_path),
+        "dataset_manifest_sha256": dataset.sha256,
+        "prediction_sha256": predictions.sha256,
+        "template_sha256": fit.sha256,
+    }
+    document = create_freeze_document(args.freeze_id, hashes, gates)
+    publish_freeze(args.output, document)
+
+
+def _fit_observed(args: argparse.Namespace) -> None:
+    freeze = authorize_observed_fit(args.freeze, args.unblind)
+    if args.workspace is None or args.output is None:
+        raise ContractError(
+            "FIT_OBSERVED_INPUT",
+            "authorized observed fit additionally requires --workspace and --output",
+        )
+    workspace = _json(args.workspace)
+    result = fit_workspace(workspace, "observed", str(freeze["freeze_sha256"]))
+    _write_json(args.output, result)
+
+
+def _report_build(args: argparse.Namespace) -> None:
+    config = load_config(args.config, "analysis")
+    evaluation = verify_artifact(args.inputs / "evaluation")
+    fit = verify_artifact(args.inputs / "expected-fit")
+    metrics = _json(evaluation.path / "metrics.json")
+    gates = _json(evaluation.path / "gates.json")
+    fit_result = _json(fit.path / "fit-result.json")
+    build_blinded_report(
+        args.output,
+        metrics,
+        fit_result,
+        gates,
+        {"evaluation": evaluation.sha256, "fit": fit.sha256},
+        config_sha256(config),
+    )
+
+
+def _contracts_validate(_: argparse.Namespace) -> None:
+    validated = validate_schema_suite()
+    load_config(Path("configs/analysis-v1.yaml"), "analysis")
+    load_config(Path("configs/catalog-sources.yaml"), "catalog-sources")
+    print("\n".join(validated))
+
+
+def _add_config(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--config", type=Path, default=Path("configs/analysis-v1.yaml"))
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the deterministic-core command tree."""
+    """Build the exact nested v2 command surface."""
 
-    parser = _Parser(
-        prog="particleml",
-        description="Bootstrap CLI for cloud-verified jet-physics workflows.",
+    parser = argparse.ArgumentParser(prog="particleml")
+    top = parser.add_subparsers(dest="group", required=True)
+
+    catalog = top.add_parser("catalog").add_subparsers(dest="action", required=True)
+    catalog_validate = catalog.add_parser("validate")
+    catalog_validate.add_argument(
+        "--config", type=Path, default=Path("configs/catalog-sources.yaml")
     )
-    groups = parser.add_subparsers(dest="group")
+    catalog_validate.add_argument("--catalog", type=Path, required=True)
+    catalog_validate.set_defaults(handler=_catalog_validate)
 
-    manifest = groups.add_parser("manifest", help="source-manifest operations")
-    manifest_commands = manifest.add_subparsers(dest="command", required=True)
-    manifest_validate = manifest_commands.add_parser("validate", help="validate exact bytes")
-    manifest_validate.add_argument("--source", required=True, type=Path)
+    dataset = top.add_parser("dataset").add_subparsers(dest="action", required=True)
+    dataset_build = dataset.add_parser("build")
+    _add_config(dataset_build)
+    dataset_build.add_argument("--catalog", type=Path, required=True)
+    dataset_build.add_argument("--cache", type=Path, required=True)
+    dataset_build.add_argument("--output", type=Path, required=True)
+    dataset_build.add_argument("--tree", default="mini")
+    dataset_build.add_argument("--chunk-size", type=int, default=50_000)
+    dataset_build.set_defaults(handler=_dataset_build)
 
-    contracts = groups.add_parser("contracts", help="serialized-contract operations")
-    contract_commands = contracts.add_subparsers(dest="command", required=True)
-    contracts_validate = contract_commands.add_parser("validate", help="validate a JSON contract")
-    contracts_validate.add_argument("--path", required=True, type=Path)
+    audit = top.add_parser("audit").add_subparsers(dest="action", required=True)
+    audit_data = audit.add_parser("data")
+    audit_data.add_argument("--dataset", type=Path, required=True)
+    audit_data.set_defaults(handler=_audit_data)
 
-    split = groups.add_parser("split", help="deterministic split operations")
-    split_commands = split.add_subparsers(dest="command", required=True)
-    split_build = split_commands.add_parser("build", help="build a split manifest")
-    split_build.add_argument("--canonical", required=True, type=Path)
-    split_build.add_argument("--config", required=True, type=Path)
-    split_build.add_argument("--output", required=True, type=Path)
+    run = top.add_parser("run").add_subparsers(dest="action", required=True)
+    run_train = run.add_parser("train")
+    _add_config(run_train)
+    run_train.add_argument("--dataset", type=Path, required=True)
+    run_train.add_argument("--output", type=Path, required=True)
+    run_train.add_argument("--model", choices=MODEL_NAMES, default="xgboost")
+    run_train.set_defaults(handler=_run_train)
 
-    convert = groups.add_parser("convert", help="convert compact ROOT to canonical HDF5")
-    convert.add_argument("--input", required=True, action="append", type=Path)
-    convert.add_argument("--source-manifest", required=True, type=Path)
-    convert.add_argument("--policy", required=True, type=Path)
-    convert.add_argument("--output", required=True, type=Path)
+    decorrelate = top.add_parser("decorrelate")
+    _add_config(decorrelate)
+    decorrelate.add_argument("--predictions", type=Path, required=True)
+    decorrelate.add_argument("--output", type=Path, required=True)
+    decorrelate.set_defaults(handler=_decorrelate)
 
-    audit = groups.add_parser("audit", help="data-audit operations")
-    audit_commands = audit.add_subparsers(dest="command", required=True)
-    audit_data = audit_commands.add_parser("data", help="run the retained data audit")
-    audit_data.add_argument("--canonical", required=True, type=Path)
-    audit_data.add_argument("--field", action="append", default=[])
-    audit_data.add_argument("--policy", required=True, type=Path)
-    audit_data.add_argument("--output", required=True, type=Path)
-    audit_e0 = audit_commands.add_parser("e0", help="aggregate the cross-artifact E0 gate")
-    audit_e0.add_argument("--evidence", required=True, type=Path)
-    audit_e0.add_argument("--policy", required=True, type=Path)
-    audit_e0.add_argument("--output", required=True, type=Path)
-    audit_e05 = audit_commands.add_parser("e05", help="aggregate the E0.5 model gate")
-    audit_e05.add_argument("--evidence", required=True, type=Path)
-    audit_e05.add_argument("--policy", required=True, type=Path)
-    audit_e05.add_argument("--output", required=True, type=Path)
+    evaluate = top.add_parser("evaluate")
+    _add_config(evaluate)
+    evaluate.add_argument("--predictions", type=Path, required=True)
+    evaluate.add_argument("--output", type=Path, required=True)
+    evaluate.add_argument("--spurious-signal-sigma", type=float, default=0.0)
+    evaluate.set_defaults(handler=_evaluate)
 
-    index = groups.add_parser("index", help="OmniLearned custom-index operations")
-    index_commands = index.add_subparsers(dest="command", required=True)
-    index_build = index_commands.add_parser("build", help="resolve an official index command")
-    index_build.add_argument("--executable", required=True, type=Path)
-    index_build.add_argument("--view", required=True, type=Path)
-    index_build.add_argument("--output", required=True, type=Path)
-    index_build.add_argument(
-        "--feature-config", required=True, choices=[item.value for item in FeatureConfig]
-    )
+    analysis = top.add_parser("analysis").add_subparsers(dest="action", required=True)
+    freeze = analysis.add_parser("freeze")
+    _add_config(freeze)
+    freeze.add_argument("--inputs", type=Path, required=True)
+    freeze.add_argument("--output", type=Path, required=True)
+    freeze.add_argument("--freeze-id", default="atlas-h4l-v1-freeze")
+    freeze.set_defaults(handler=_analysis_freeze)
 
-    checkpoint = groups.add_parser("checkpoint", help="checkpoint integrity operations")
-    checkpoint_commands = checkpoint.add_subparsers(dest="command", required=True)
-    checkpoint_audit = checkpoint_commands.add_parser("audit", help="audit checkpoint provenance")
-    checkpoint_audit.add_argument("--checkpoint", required=True, type=Path)
-    checkpoint_audit.add_argument("--metadata", required=True, type=Path)
+    fit = top.add_parser("fit").add_subparsers(dest="action", required=True)
+    expected = fit.add_parser("expected")
+    _add_config(expected)
+    expected.add_argument("--predictions", type=Path, required=True)
+    expected.add_argument("--output", type=Path, required=True)
+    expected.set_defaults(handler=_fit_expected)
+    observed = fit.add_parser("observed")
+    observed.add_argument("--freeze", type=Path)
+    observed.add_argument("--unblind", action="store_true")
+    observed.add_argument("--workspace", type=Path)
+    observed.add_argument("--output", type=Path)
+    observed.set_defaults(handler=_fit_observed)
 
-    run = groups.add_parser("run", help="stage-gated experiment operations")
-    run_commands = run.add_subparsers(dest="command", required=True)
-    run_train = run_commands.add_parser("train", help="resolve a frozen training matrix")
-    run_train.add_argument("--config", required=True, type=Path)
-    run_train.add_argument("--gates", required=True, type=Path)
-    run_train.add_argument("--dry-run", action="store_true")
+    report = top.add_parser("report").add_subparsers(dest="action", required=True)
+    report_build = report.add_parser("build")
+    _add_config(report_build)
+    report_build.add_argument("--inputs", type=Path, required=True)
+    report_build.add_argument("--output", type=Path, required=True)
+    report_build.set_defaults(handler=_report_build)
 
-    evaluate = groups.add_parser("evaluate", help="evaluate aligned predictions")
-    evaluate.add_argument("--metadata", required=True, type=Path)
-    evaluate.add_argument("--payload", required=True, type=Path)
-    evaluate.add_argument("--validation-threshold", required=True, type=float)
-
-    report = groups.add_parser("report", help="evidence-derived report operations")
-    report_commands = report.add_subparsers(dest="command", required=True)
-    report_build = report_commands.add_parser("build", help="build a deterministic report")
-    report_build.add_argument("--config", required=True, type=Path)
-    report_build.add_argument("--run-record", action="append", default=[], type=Path)
-    report_build.add_argument("--output", required=True, type=Path)
-
-    view = groups.add_parser("view", help="model-view operations")
-    view_commands = view.add_subparsers(dest="command", required=True)
-    view_build = view_commands.add_parser("build", help="materialize one A-D view")
-    view_build.add_argument("--canonical", required=True, type=Path)
-    view_build.add_argument("--preprocessing", required=True, type=Path)
-    view_build.add_argument("--identities", required=True, type=Path)
-    view_build.add_argument("--split-manifest-sha256", required=True)
-    view_build.add_argument("--split-manifest", type=Path)
-    view_build.add_argument("--subset-sha256")
-    view_build.add_argument("--allow-unpublished-diagnostics", action="store_true")
-    view_build.add_argument(
-        "--feature-config", required=True, choices=[item.value for item in FeatureConfig]
-    )
-    view_build.add_argument("--output", required=True, type=Path)
+    contracts = top.add_parser("contracts").add_subparsers(dest="action", required=True)
+    contracts_validate = contracts.add_parser("validate")
+    contracts_validate.set_defaults(handler=_contracts_validate)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run one command and map typed project exceptions to stable exit codes."""
+    """Run one command and map stable contract failures to exit code 2."""
 
     parser = build_parser()
+    args = parser.parse_args(argv)
+    handler = cast(Callable[[argparse.Namespace], None], args.handler)
     try:
-        arguments = parser.parse_args(list(argv) if argv is not None else None)
-        if arguments.group is None:
-            parser.print_help()
-            return 0
-        if arguments.group == "manifest" and arguments.command == "validate":
-            print(hash_source_manifest(load_source_manifest(arguments.source)))
-            return 0
-        if arguments.group == "contracts" and arguments.command == "validate":
-            kind = validate_contract(arguments.path)
-            print(f"valid {kind} contract")
-            return 0
-        if arguments.group == "split" and arguments.command == "build":
-            output = build_split_manifest(arguments.canonical, arguments.config, arguments.output)
-            print(f"valid split manifest: {output}")
-            return 0
-        if arguments.group == "convert":
-            output = convert_compact_root(
-                arguments.input,
-                arguments.source_manifest,
-                arguments.policy,
-                arguments.output,
-            )
-            print(f"valid canonical dataset: {output}")
-            return 0
-        if arguments.group == "audit" and arguments.command == "data":
-            report = build_data_audit(
-                arguments.canonical,
-                arguments.field,
-                arguments.policy,
-                arguments.output,
-            )
-            print(f"data audit {report['status']}: {arguments.output}")
-            return 0
-        if arguments.group == "audit" and arguments.command == "e0":
-            report = build_e0_audit(arguments.evidence, arguments.policy, arguments.output)
-            print(f"E0 audit {report['status']}: {arguments.output}")
-            return 0
-        if arguments.group == "audit" and arguments.command == "e05":
-            report = aggregate_e05(arguments.evidence, arguments.policy, arguments.output)
-            print(f"E0.5 audit {report['status']}: {arguments.output}")
-            return 0
-        if arguments.group == "index" and arguments.command == "build":
-            resolved = build_index_argv(
-                arguments.executable,
-                arguments.view,
-                arguments.output,
-                FeatureConfig(arguments.feature_config),
-            )
-            print(json.dumps(list(resolved), separators=(",", ":")))
-            return 0
-        if arguments.group == "checkpoint" and arguments.command == "audit":
-            metadata = validate_checkpoint(arguments.checkpoint, arguments.metadata)
-            print(f"valid checkpoint: {metadata['sha256']}")
-            return 0
-        if arguments.group == "run" and arguments.command == "train":
-            try:
-                gates = json.loads(arguments.gates.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                raise ConfigurationError("RUN_GATES_INVALID", "cannot load gate records") from exc
-            if not isinstance(gates, dict):
-                raise ConfigurationError("RUN_GATES_INVALID", "gate records must be an object")
-            if arguments.dry_run:
-                print(json.dumps(dry_run_ledger(arguments.config, gates), sort_keys=True))
-                return 0
-            specs = resolve_matrix(arguments.config, gates)
-            raise ConfigurationError(
-                "RUN_EXECUTION_EXPLICIT_COMMAND_REQUIRED",
-                f"resolved {len(specs)} conditions; execution must use retained commands",
-            )
-        if arguments.group == "evaluate":
-            predictions = validate_prediction_payload(arguments.metadata, arguments.payload)
-            metrics = evaluate_binary_predictions(
-                predictions, validation_threshold=arguments.validation_threshold
-            )
-            print(json.dumps(metrics, sort_keys=True, separators=(",", ":")))
-            return 0
-        if arguments.group == "report" and arguments.command == "build":
-            output = build_report(arguments.config, arguments.run_record, arguments.output)
-            print(f"valid evidence-derived report: {output}")
-            return 0
-        if arguments.group == "view" and arguments.command == "build":
-            output = materialize_view(
-                arguments.canonical,
-                arguments.preprocessing,
-                arguments.identities,
-                arguments.split_manifest_sha256,
-                FeatureConfig(arguments.feature_config),
-                arguments.output,
-                expected_subset_sha256=arguments.subset_sha256,
-                split_manifest_path=arguments.split_manifest,
-                require_completed_dependencies=not arguments.allow_unpublished_diagnostics,
-            )
-            print(f"valid {arguments.feature_config} view: {output}")
-            return 0
-        raise ConfigurationError("CLI_USAGE", "unsupported command")
-    except ParticleMLError as exc:
+        handler(args)
+    except (ContractError, IntegrityError, PhysicsError) as exc:
         print(str(exc), file=sys.stderr)
-        return exc.exit_code
+        return 2
+    except Exception as exc:
+        print(f"unexpected failure: {exc}", file=sys.stderr)
+        return 1
+    return 0
 
 
 def entrypoint() -> NoReturn:
-    """Translate the reusable return code into a process exit status."""
+    """Console-script boundary."""
 
     raise SystemExit(main())

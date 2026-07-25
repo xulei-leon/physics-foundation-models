@@ -188,6 +188,10 @@ def train_seeded_predictions(
                 "m4l": frame["m4l"].astype(float).to_numpy(),
                 "model_name": model_name,
                 "seed_or_ensemble": seed,
+                "is_data": frame["is_data"].astype(bool).to_numpy(),
+                "process_group": frame["process_group"].astype(str).to_numpy(),
+                "split": frame["split"].astype(str).to_numpy(),
+                "w_train": frame["w_train"].to_numpy(),
             }
         )
     ensemble = ensemble_predictions(predictions)
@@ -204,7 +208,17 @@ def ensemble_predictions(predictions: Mapping[int, pd.DataFrame]) -> pd.DataFram
         raise ContractError("PREDICTION_DUPLICATE", "duplicate event_id in reference")
     event_order = reference["event_id"].astype(str).tolist()
     score_columns: list[np.ndarray[Any, np.dtype[np.float64]]] = []
-    metadata = ["target", "w_yield", "channel", "m4l", "model_name"]
+    metadata = [
+        "target",
+        "w_yield",
+        "channel",
+        "m4l",
+        "model_name",
+        "is_data",
+        "process_group",
+        "split",
+        "w_train",
+    ]
     for seed in FORMAL_SEEDS:
         candidate = predictions[seed]
         if candidate["event_id"].duplicated().any():

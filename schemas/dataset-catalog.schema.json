@@ -53,7 +53,11 @@
           "enum": ["data", "signal", "irreducible_background", "reducible_background"]
         },
         "generator_group": {"type": ["string", "null"]},
-        "is_nominal": {"type": "boolean", "default": true}
+        "is_nominal": {"type": "boolean", "default": true},
+        "xsec_pb": {"type": "number", "exclusiveMinimum": 0},
+        "kfactor": {"type": "number", "exclusiveMinimum": 0},
+        "filter_efficiency": {"type": "number", "exclusiveMinimum": 0},
+        "sum_of_generator_weights": {"type": "number", "not": {"const": 0}}
       },
       "allOf": [
         {
@@ -66,7 +70,14 @@
           },
           "else": {
             "properties": {"record_id": {"const": "atlas-93928"}},
-            "required": ["generator_group", "is_nominal"]
+            "required": [
+              "generator_group",
+              "is_nominal",
+              "xsec_pb",
+              "kfactor",
+              "filter_efficiency",
+              "sum_of_generator_weights"
+            ]
           }
         }
       ]

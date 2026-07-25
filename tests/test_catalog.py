@@ -62,6 +62,10 @@ def test_catalog_validates_explicit_file_identity() -> None:
                 "process_group": "signal",
                 "generator_group": "ggH",
                 "is_nominal": True,
+                "xsec_pb": 1.0,
+                "kfactor": 1.0,
+                "filter_efficiency": 1.0,
+                "sum_of_generator_weights": 1.0,
             },
         ],
     )
@@ -80,6 +84,10 @@ def test_duplicate_nominal_signal_generator_is_rejected() -> None:
             "process_group": "signal",
             "generator_group": "ggH",
             "is_nominal": True,
+            "xsec_pb": 1.0,
+            "kfactor": 1.0,
+            "filter_efficiency": 1.0,
+            "sum_of_generator_weights": 1.0,
         }
         for index in (1, 2)
     ]
