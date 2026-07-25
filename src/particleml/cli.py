@@ -29,6 +29,7 @@ from .contracts import (
 from .dataset import audit_frame, load_dataset
 from .decorrelation import DDTCalibrator, ddt_category, evaluate_decorrelation_gates
 from .evaluation import weighted_metrics
+from .features import PRIMARY_FEATURES
 from .inference import build_templates, build_workspace, fit_workspace, spurious_signal_sigma
 from .ingestion import SourceDescriptor, ingest_sources, publish_canonical_dataset
 from .models import MODEL_NAMES, train_seeded_predictions
@@ -119,6 +120,7 @@ def _dataset_build(args: argparse.Namespace) -> None:
 
 
 def _audit_data(args: argparse.Namespace) -> None:
+    load_config(args.config, "analysis")
     frame, _ = load_dataset(args.dataset)
     print(json.dumps(audit_frame(frame), sort_keys=True))
 
@@ -131,7 +133,16 @@ def _training_writer(
     dataset_artifact: Artifact,
     parsed_command: Sequence[str],
 ) -> Artifact:
-    seeded, ensemble, features = train_seeded_predictions(frame, config, model_name)
+    feature_config = cast(Mapping[str, Any], config["features"])
+    configured_fields = tuple(str(value) for value in feature_config["primary"])
+    if configured_fields != PRIMARY_FEATURES:
+        raise ContractError(
+            "FEATURE_CONFIG",
+            "analysis config primary features do not match the v1 frozen contract",
+        )
+    seeded, ensemble, features = train_seeded_predictions(
+        frame, config, model_name, fields=configured_fields
+    )
     config_hash = config_sha256(config)
 
     def writer(partial: Path) -> None:
@@ -381,12 +392,18 @@ def _analysis_freeze(args: argparse.Namespace) -> None:
 
 
 def _fit_observed(args: argparse.Namespace) -> None:
+    config = load_config(args.config, "analysis")
     freeze = authorize_observed_fit(args.freeze, args.unblind)
+    if freeze["config_sha256"] != config_sha256(config):
+        raise ContractError("FREEZE_UPSTREAM_HASH", "config_sha256 does not match")
     if args.workspace is None or args.output is None:
         raise ContractError(
             "FIT_OBSERVED_INPUT",
             "authorized observed fit additionally requires --workspace and --output",
         )
+    template_artifact = verify_artifact(args.workspace.parent)
+    if template_artifact.sha256 != freeze["template_sha256"]:
+        raise ContractError("FREEZE_UPSTREAM_HASH", "template_sha256 does not match")
     workspace = _json(args.workspace)
     result = fit_workspace(workspace, "observed", str(freeze["freeze_sha256"]))
     _write_json(args.output, result)
@@ -446,6 +463,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     audit = top.add_parser("audit").add_subparsers(dest="action", required=True)
     audit_data = audit.add_parser("data")
+    _add_config(audit_data)
     audit_data.add_argument("--dataset", type=Path, required=True)
     audit_data.set_defaults(handler=_audit_data)
 
@@ -485,6 +503,7 @@ def build_parser() -> argparse.ArgumentParser:
     expected.add_argument("--output", type=Path, required=True)
     expected.set_defaults(handler=_fit_expected)
     observed = fit.add_parser("observed")
+    _add_config(observed)
     observed.add_argument("--freeze", type=Path)
     observed.add_argument("--unblind", action="store_true")
     observed.add_argument("--workspace", type=Path)

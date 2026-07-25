@@ -301,3 +301,23 @@ def spurious_signal_sigma(workspace_spec: Mapping[str, object]) -> float:
     minimum_nll = float(np.asarray(minimum).reshape(-1)[0])
     sigma = _profile_sigma(mu_hat, minimum_nll, data, model)
     return abs(mu_hat) / sigma
+
+
+def expected_significance_delta(
+    xgboost_result: Mapping[str, object],
+    cut_based_result: Mapping[str, object],
+) -> dict[str, float]:
+    """Compute the frozen primary endpoint from two expected-fit artifacts."""
+
+    if xgboost_result.get("mode") != "expected" or cut_based_result.get("mode") != "expected":
+        raise ContractError("FIT_COMPARISON_MODE", "primary endpoint requires expected fits")
+    primary = float(cast(Any, xgboost_result["significance"]))
+    baseline = float(cast(Any, cut_based_result["significance"]))
+    if baseline <= 0:
+        raise ContractError("FIT_COMPARISON_BASELINE", "cut-based significance must be positive")
+    return {
+        "xgboost_expected_significance": primary,
+        "cut_based_expected_significance": baseline,
+        "absolute_delta": primary - baseline,
+        "relative_delta": primary / baseline - 1.0,
+    }

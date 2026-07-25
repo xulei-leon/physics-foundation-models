@@ -33,6 +33,11 @@ expected profile-likelihood sensitivity over a cut-based baseline.
   analysis logic.
 - Every scientific claim must trace to config, manifest, run record,
   predictions, freeze, and fit result.
+- Prefer the codebase knowledge graph for code discovery before text search.
+- Do not use web-service or remote-filesystem abstractions; make explicit
+  HTTP/HTTPS requests and permit HTTPS only for analysis inputs.
+- Ask for human confirmation before using multiple subagents.
+- Do not enable optional superpower workflows unless the user explicitly asks.
 
 All repository text, code comments, and documentation must be written in
 English.

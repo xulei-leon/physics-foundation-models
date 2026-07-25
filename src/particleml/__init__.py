@@ -1,7 +1,10 @@
 """Public package metadata for particleML."""
 
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 
 __all__ = ["__version__"]
 
-__version__ = version("particleml-research")
+try:
+    __version__ = version("particleml-research")
+except PackageNotFoundError:
+    __version__ = "0.2.0"

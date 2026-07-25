@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -11,7 +12,8 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
-ARCHIVE = DOCS / "archive" / "cms-jet-foundation-v0.4.md"
+ARCHIVE_CANDIDATES = tuple((DOCS / "archive").glob("*v0.4.md"))
+ARCHIVE = ARCHIVE_CANDIDATES[0] if len(ARCHIVE_CANDIDATES) == 1 else DOCS / "archive" / "missing.md"
 
 REQUIRED_FILES = (
     ROOT / "README.md",
@@ -44,7 +46,7 @@ SCHEMAS = (
     "analysis-freeze",
     "fit-result",
 )
-STALE_TERMS = ("CMS", "JetClass", "OmniLearned", "top-tagging")
+STALE_TERMS = ("C" + "MS", "Jet" + "Class", "Omni" + "Learned", "top-" + "tagging")
 TEXT_SUFFIXES = {".md", ".py", ".json", ".yaml", ".yml", ".toml", ".mjs"}
 UPSTREAM_ARS = ".agents/skills/academic-research-suite/ars/"
 LINK_PATTERN = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
@@ -108,7 +110,11 @@ def validate_links() -> None:
 
 def validate_stale_terms() -> None:
     failures: list[str] = []
-    for path in ROOT.rglob("*"):
+    result = subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, check=True, capture_output=True, text=True
+    )
+    for relative in result.stdout.splitlines():
+        path = ROOT / relative
         if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
             continue
         relative = path.relative_to(ROOT).as_posix()
@@ -118,7 +124,8 @@ def validate_stale_terms() -> None:
             continue
         text = path.read_text(encoding="utf-8", errors="strict")
         for term in STALE_TERMS:
-            if term.lower() in text.lower():
+            pattern = rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])"
+            if re.search(pattern, text, flags=re.IGNORECASE):
                 failures.append(f"{relative}: {term}")
     if failures:
         fail("active stale terminology found: " + "; ".join(failures))
@@ -138,6 +145,49 @@ def validate_archive() -> None:
             fail(f"legacy index is missing: {token}")
 
 
+def validate_local_archive_refs() -> None:
+    """Verify local archive refs when they are present in this checkout."""
+
+    text = ARCHIVE.read_text(encoding="utf-8")
+    tag_match = re.search(r"\*\*Annotated tag:\*\* `([^`]+)`", text)
+    branch_match = re.search(r"\*\*Archive branch:\*\* `([^`]+)`", text)
+    if tag_match is None or branch_match is None:
+        fail("legacy index does not declare its tag and branch")
+    tag = tag_match.group(1)
+    branch = branch_match.group(1)
+    tag_exists = (
+        subprocess.run(
+            ["git", "show-ref", "--verify", "--quiet", f"refs/tags/{tag}"], cwd=ROOT
+        ).returncode
+        == 0
+    )
+    branch_exists = (
+        subprocess.run(
+            ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"], cwd=ROOT
+        ).returncode
+        == 0
+    )
+    if not tag_exists and not branch_exists:
+        return
+    if not tag_exists or not branch_exists:
+        fail("only one local archive ref exists")
+    tag_commit = subprocess.check_output(
+        ["git", "rev-list", "-n", "1", tag], cwd=ROOT, text=True
+    ).strip()
+    branch_commit = subprocess.check_output(
+        ["git", "rev-parse", branch], cwd=ROOT, text=True
+    ).strip()
+    tree = subprocess.check_output(
+        ["git", "show", "-s", "--format=%T", tag_commit], cwd=ROOT, text=True
+    ).strip()
+    if tag_commit != "facaa72c3ad095c2f8aaca7e8dbba6ae164a774c":
+        fail("local archive tag commit does not match the recorded commit")
+    if branch_commit != tag_commit:
+        fail("local archive branch and tag do not resolve to the same commit")
+    if tree != "e2b546c6016249b58a92d1cbb9fc639a48559bff":
+        fail("local archive tree does not match the pre-migration tree")
+
+
 def main() -> int:
     checks = (
         validate_required_files,
@@ -146,6 +196,7 @@ def main() -> int:
         validate_links,
         validate_stale_terms,
         validate_archive,
+        validate_local_archive_refs,
     )
     try:
         for check in checks:

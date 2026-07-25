@@ -49,7 +49,7 @@ def validate_catalog(catalog: Mapping[str, Any]) -> None:
     for record in catalog["records"]:
         require_https(str(record["metadata_url"]))
     seen_urls: set[str] = set()
-    nominal_signal_groups: set[str] = set()
+    nominal_signal_groups: dict[str, str] = {}
     for item in catalog["files"]:
         url = str(item["url"])
         require_https(url)
@@ -61,12 +61,14 @@ def validate_catalog(catalog: Mapping[str, Any]) -> None:
             raise ContractError("CATALOG_PROCESS", f"unsupported process group: {group}")
         if group == "signal" and bool(item.get("is_nominal", False)):
             generator_group = str(item.get("generator_group", ""))
-            if generator_group in nominal_signal_groups:
+            dataset_id = str(item["dataset_id"])
+            existing_dataset = nominal_signal_groups.get(generator_group)
+            if existing_dataset is not None and existing_dataset != dataset_id:
                 raise ContractError(
                     "CATALOG_DUPLICATE_SIGNAL",
                     f"multiple nominal signal samples for {generator_group}",
                 )
-            nominal_signal_groups.add(generator_group)
+            nominal_signal_groups[generator_group] = dataset_id
 
 
 def make_catalog(

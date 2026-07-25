@@ -4,7 +4,8 @@
 **Plan version:** 1.0.0  
 **Software contract version:** 2.0.0  
 **Package version:** 0.2.0  
-**Status:** implementation in progress
+**Status:** M0--M5 implemented and locally verified; real-data unblinding
+remains out of scope
 
 ## Objective
 

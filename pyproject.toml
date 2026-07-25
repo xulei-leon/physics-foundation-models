@@ -59,6 +59,7 @@ ci = [
   "scipy>=1.13,<1.16",
   "shap>=0.46,<1",
   "types-jsonschema>=4.23,<5",
+  "types-pyyaml>=6.0,<7",
   "uproot>=5.4,<6",
   "xgboost>=2.1,<4",
 ]

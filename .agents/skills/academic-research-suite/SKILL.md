@@ -6,7 +6,7 @@ description: >
   literature review, experiment planning, benchmark interpretation, manuscript
   drafting, paper revision, citation verification, reviewer simulation, and
   research-to-paper workflows. Use when the user asks for research question
-  refinement, paper topic scoping, related work synthesis, JetClass or top-tagging
+  refinement, paper topic scoping, related work synthesis, four-lepton
   experiment design, model-comparison framing, reproducibility planning,
   statistical interpretation, academic writing, reviewer responses, citation or
   integrity checks, or Claude-style ARS aliases such as /ars-plan, ars-plan,

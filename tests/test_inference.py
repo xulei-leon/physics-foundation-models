@@ -9,6 +9,7 @@ from particleml.inference import (
     FINAL_STATES,
     build_templates,
     build_workspace,
+    expected_significance_delta,
     fit_workspace,
     merge_nonpositive_bins,
     spurious_signal_sigma,
@@ -70,3 +71,9 @@ def test_six_channel_workspace_nuisances_and_expected_fit() -> None:
     assert float(result["mu_hat"]) == pytest.approx(1.0, abs=1e-3)
     assert len(result["mu_interval"]) == 2
     assert spurious_signal_sigma(workspace) < 0.2
+    comparison = expected_significance_delta(
+        {"mode": "expected", "significance": 3.0},
+        {"mode": "expected", "significance": 2.0},
+    )
+    assert comparison["absolute_delta"] == 1.0
+    assert comparison["relative_delta"] == 0.5

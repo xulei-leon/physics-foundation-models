@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import yaml
 
-from .contracts import ContractError, SCHEMA_VERSION, sha256_document
+from .contracts import SCHEMA_VERSION, ContractError, sha256_document
 
 Spec = Mapping[str, object]
 

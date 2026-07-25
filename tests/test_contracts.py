@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 from particleml.contracts import (
-    ContractError,
     SCHEMA_NAMES,
+    ContractError,
     model_input_hash,
     sha256_document,
     validate_document,

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError, ValidationError
@@ -135,7 +136,10 @@ def validate_document(
     """Validate a document and report the first deterministic error."""
 
     validator = Draft202012Validator(load_schema(name, root), format_checker=FormatChecker())
-    errors = sorted(validator.iter_errors(dict(document)), key=lambda item: list(item.absolute_path))
+    errors = sorted(
+        validator.iter_errors(dict(document)),
+        key=lambda item: list(item.absolute_path),
+    )
     if errors:
         error = errors[0]
         path = ".".join(str(part) for part in error.absolute_path) or "$"
