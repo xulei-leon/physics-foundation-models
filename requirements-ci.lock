@@ -69,6 +69,8 @@ pluggy==1.6.0
     #   pytest
 pygments==2.20.0
     # via pytest
+pyyaml==6.0.3
+    # via particleml-research (pyproject.toml)
 pyproject-hooks==1.2.0
     # via build
 pytest==8.4.2

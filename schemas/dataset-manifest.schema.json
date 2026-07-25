@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://particleml.local/schemas/2.0.0/dataset-manifest.schema.json",
+  "title": "particleML canonical Parquet dataset manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_id",
+    "catalog_sha256",
+    "config_sha256",
+    "created_at",
+    "unit_system",
+    "row_count",
+    "columns",
+    "partitions",
+    "cutflow"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "dataset_id": {"type": "string", "minLength": 1},
+    "catalog_sha256": {"$ref": "#/$defs/sha256"},
+    "config_sha256": {"$ref": "#/$defs/sha256"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "unit_system": {"const": "GeV"},
+    "row_count": {"type": "integer", "minimum": 0},
+    "columns": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "partitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "rows"],
+        "properties": {
+          "path": {"type": "string", "pattern": "\\.parquet$"},
+          "sha256": {"$ref": "#/$defs/sha256"},
+          "rows": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "cutflow": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

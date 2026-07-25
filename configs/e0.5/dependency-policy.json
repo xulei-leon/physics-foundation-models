@@ -1,9 +1,0 @@
-{
-  "schema_version": "1.0.0",
-  "repository": "official OmniLearned repository",
-  "revision": "5091595d226b6021e967ab2ecfff832f40c026f6",
-  "boundary": "isolated_argument_array_subprocess",
-  "formal_environment": "qualified_runpod",
-  "shell": false,
-  "timeout_seconds": 3600
-}

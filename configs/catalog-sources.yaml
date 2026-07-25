@@ -1,0 +1,21 @@
+schema_version: "2.0.0"
+catalog_id: atlas-exactly4lep-2015-2016-v1
+records:
+  - record_id: atlas-93924
+    kind: data
+    metadata_url: https://opendata.cern.ch/api/records/atlas-93924
+  - record_id: atlas-93928
+    kind: mc
+    metadata_url: https://opendata.cern.ch/api/records/atlas-93928
+transport:
+  allowed_schemes: [https]
+  verify_tls: true
+  require_sha256: true
+classification:
+  signal_name_requires: [H125]
+  signal_name_requires_any: [ZZ4l, ZZ4lep]
+  process_groups:
+    irreducible_background: [ZZ]
+    reducible_background: [Zjets, ttbar]
+  unknown_process_policy: reject
+  alternative_generator_policy: systematic_only

@@ -1,7 +1,0 @@
-{
-  "schema_version": "1.0.0",
-  "approved": false,
-  "decision": null,
-  "reason": "No fallback is approved without retained failed compatibility evidence and explicit authorization.",
-  "evidence_sha256": null
-}

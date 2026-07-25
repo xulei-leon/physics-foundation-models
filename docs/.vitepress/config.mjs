@@ -35,7 +35,7 @@ export function createSidebar(directory = docsRoot) {
 
 export default defineConfig({
   title: 'particleML',
-  description: 'Research documentation for jet foundation models in high-energy physics.',
+  description: 'Blinded ATLAS Open Data four-lepton Higgs ML analysis documentation.',
   base: '/particleML/',
   cleanUrls: true,
   themeConfig: {

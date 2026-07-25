@@ -1,277 +1,51 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://xulei-leon.github.io/particleML/schemas/split-manifest.schema.json",
-  "title": "particleML Split Manifest",
-  "description": "Frozen source-file split, class counts, preprocessing identity, and nested training-subset provenance for the CMS 2015 study.",
+  "$id": "https://particleml.local/schemas/2.0.0/split-manifest.schema.json",
+  "title": "particleML deterministic event split manifest",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
-    "manifest_id",
-    "study_id",
-    "created_at",
-    "dataset",
-    "split_rule",
-    "source_files",
-    "partitions",
-    "training_subsets",
-    "preprocessing",
-    "semantic_checks",
-    "hash_metadata"
+    "algorithm",
+    "identity_fields",
+    "fractions",
+    "dataset_manifest_sha256",
+    "counts_by_dataset"
   ],
   "properties": {
-    "schema_version": {
-      "const": "1.0.0"
+    "schema_version": {"const": "2.0.0"},
+    "algorithm": {"const": "sha256-bucket-v1"},
+    "identity_fields": {
+      "const": ["dataset_id", "file_checksum", "entry_index"]
     },
-    "manifest_id": {
-      "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
-    },
-    "study_id": {
-      "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
-    },
-    "created_at": {
-      "$ref": "#/$defs/timestamp"
-    },
-    "dataset": {
-      "$ref": "#/$defs/dataset"
-    },
-    "split_rule": {
-      "$ref": "#/$defs/split_rule"
-    },
-    "source_files": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "$ref": "#/$defs/source_file" }
-    },
-    "partitions": {
+    "fractions": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["train", "validation", "test"],
+      "required": ["train", "calibration", "validation", "test"],
       "properties": {
-        "train": { "$ref": "#/$defs/partition" },
-        "validation": { "$ref": "#/$defs/partition" },
-        "test": { "$ref": "#/$defs/partition" }
+        "train": {"const": 0.7},
+        "calibration": {"const": 0.1},
+        "validation": {"const": 0.1},
+        "test": {"const": 0.1}
       }
     },
-    "training_subsets": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "$ref": "#/$defs/training_subset" }
-    },
-    "preprocessing": {
+    "dataset_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "counts_by_dataset": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["feature_version", "policy", "fitted_partition", "pid_vocabulary", "impact_parameter_policy"],
-      "properties": {
-        "feature_version": { "type": "string", "minLength": 1 },
-        "policy": { "$ref": "#/$defs/artifact" },
-        "fitted_partition": { "const": "train" },
-        "pid_vocabulary": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["unknown", "charged_hadron", "neutral_hadron", "photon", "electron", "muon"],
-          "properties": {
-            "unknown": { "const": 0 },
-            "charged_hadron": { "const": 1 },
-            "neutral_hadron": { "const": 2 },
-            "photon": { "const": 3 },
-            "electron": { "const": 4 },
-            "muon": { "const": 5 }
-          }
-        },
-        "impact_parameter_policy": {
-          "enum": ["checkpoint_native", "training_fitted"]
-        },
-        "pt_eta_control_sha256": {
-          "oneOf": [
-            { "$ref": "#/$defs/sha256" },
-            { "type": "null" }
-          ]
-        },
-        "pileup_reweighting_sha256": {
-          "oneOf": [
-            { "$ref": "#/$defs/sha256" },
-            { "type": "null" }
-          ]
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["train", "calibration", "validation", "test"],
+        "properties": {
+          "train": {"type": "integer", "minimum": 0},
+          "calibration": {"type": "integer", "minimum": 0},
+          "validation": {"type": "integer", "minimum": 0},
+          "test": {"type": "integer", "minimum": 0}
         }
-      }
-    },
-    "semantic_checks": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "unique_pfns",
-        "pfn_disjoint",
-        "event_disjoint",
-        "subset_identities_unique",
-        "subsets_nested",
-        "class_counts_sufficient"
-      ],
-      "properties": {
-        "unique_pfns": { "const": true },
-        "pfn_disjoint": { "const": true },
-        "event_disjoint": { "const": true },
-        "subset_identities_unique": { "const": true },
-        "subsets_nested": { "const": true },
-        "class_counts_sufficient": { "const": true }
-      }
-    },
-    "hash_metadata": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["algorithm", "canonicalization", "content_sha256"],
-      "properties": {
-        "algorithm": { "const": "sha256" },
-        "canonicalization": { "const": "utf8-sorted-keys-compact-json-lf-excluding-hash_metadata.content_sha256" },
-        "content_sha256": { "$ref": "#/$defs/sha256" }
       }
     }
   },
   "$defs": {
-    "timestamp": {
-      "type": "string",
-      "format": "date-time",
-      "pattern": "Z$"
-    },
-    "sha256": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
-    },
-    "artifact": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["path", "sha256"],
-      "properties": {
-        "path": { "type": "string", "minLength": 1 },
-        "sha256": { "$ref": "#/$defs/sha256" },
-        "byte_size": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "source_record": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["record_id", "role"],
-      "properties": {
-        "record_id": { "type": "integer", "minimum": 1 },
-        "role": { "enum": ["signal", "qcd_candidate", "qcd_active", "qcd_excluded_after_e0"] }
-      }
-    },
-    "dataset": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "campaign", "source_manifest", "canonical_dataset", "source_records"],
-      "properties": {
-        "name": { "const": "CMS 2015 RunIIFall15MiniAODv2" },
-        "campaign": { "const": "RunIIFall15MiniAODv2" },
-        "source_manifest": { "$ref": "#/$defs/artifact" },
-        "canonical_dataset": { "$ref": "#/$defs/artifact" },
-        "source_records": {
-          "type": "array",
-          "minItems": 2,
-          "items": { "$ref": "#/$defs/source_record" }
-        }
-      }
-    },
-    "split_rule": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["version", "identifier", "input", "encoding", "digest", "integer_byte_order", "modulus", "buckets"],
-      "properties": {
-        "version": { "const": "exact-pfn-sha256-mod10-v1" },
-        "identifier": { "const": "exact_pfn_sha256_mod10" },
-        "input": { "const": "exact canonical_pfn field from the sorted source manifest" },
-        "encoding": { "const": "UTF-8" },
-        "digest": { "const": "SHA-256" },
-        "integer_byte_order": { "const": "big" },
-        "modulus": { "const": 10 },
-        "buckets": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["test", "validation", "train"],
-          "properties": {
-            "test": {
-              "type": "array",
-              "prefixItems": [{ "const": 0 }],
-              "items": false,
-              "minItems": 1,
-              "maxItems": 1
-            },
-            "validation": {
-              "type": "array",
-              "prefixItems": [{ "const": 1 }],
-              "items": false,
-              "minItems": 1,
-              "maxItems": 1
-            },
-            "train": {
-              "type": "array",
-              "prefixItems": [
-                { "const": 2 }, { "const": 3 }, { "const": 4 }, { "const": 5 },
-                { "const": 6 }, { "const": 7 }, { "const": 8 }, { "const": 9 }
-              ],
-              "items": false,
-              "minItems": 8,
-              "maxItems": 8
-            }
-          }
-        }
-      }
-    },
-    "source_file": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["record_id", "role", "canonical_pfn", "pfn_sha256", "adler32", "size_bytes", "bucket", "split"],
-      "properties": {
-        "record_id": { "type": "integer", "minimum": 1 },
-        "role": { "enum": ["signal", "qcd_candidate", "qcd_active", "qcd_excluded_after_e0"] },
-        "canonical_pfn": { "type": "string", "minLength": 1 },
-        "pfn_sha256": { "$ref": "#/$defs/sha256" },
-        "adler32": { "type": "string", "pattern": "^[0-9a-fA-F]{8}$" },
-        "size_bytes": { "type": "integer", "minimum": 1 },
-        "bucket": { "type": "integer", "minimum": 0, "maximum": 9 },
-        "split": { "enum": ["train", "validation", "test"] }
-      }
-    },
-    "class_counts": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["qcd", "top"],
-      "properties": {
-        "qcd": { "type": "integer", "minimum": 0 },
-        "top": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "partition": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["file_count", "event_count", "jet_counts_by_class", "record_jet_counts"],
-      "properties": {
-        "file_count": { "type": "integer", "minimum": 0 },
-        "event_count": { "type": "integer", "minimum": 0 },
-        "jet_counts_by_class": { "$ref": "#/$defs/class_counts" },
-        "record_jet_counts": {
-          "type": "object",
-          "patternProperties": {
-            "^[1-9][0-9]*$": { "type": "integer", "minimum": 0 }
-          },
-          "additionalProperties": false
-        }
-      }
-    },
-    "training_subset": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["subset_id", "train_size_per_class", "subset_seed", "selection_rule", "identity_payload", "counts_by_class"],
-      "properties": {
-        "subset_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" },
-        "train_size_per_class": { "type": "integer", "minimum": 1 },
-        "subset_seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
-        "selection_rule": { "const": "sha256-ranked-signal-and-record-round-robin-qcd-v1" },
-        "identity_payload": { "$ref": "#/$defs/artifact" },
-        "counts_by_class": { "$ref": "#/$defs/class_counts" }
-      }
-    }
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
   }
 }

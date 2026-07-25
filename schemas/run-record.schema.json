@@ -1,466 +1,53 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://xulei-leon.github.io/particleML/schemas/run-record.schema.json",
-  "title": "particleML Run Record",
-  "description": "Final provenance and outcome record for one attempted particleML training run.",
+  "$id": "https://particleml.local/schemas/2.0.0/run-record.schema.json",
+  "title": "particleML run record",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
     "run_id",
-    "study_id",
-    "stage",
-    "status",
-    "created_at",
+    "command",
     "started_at",
-    "ended_at",
-    "git",
-    "data",
-    "condition",
-    "model",
-    "hyperparameters",
-    "environment",
-    "timing",
-    "artifacts",
-    "failure"
+    "completed_at",
+    "status",
+    "config_sha256",
+    "input_artifacts",
+    "software",
+    "model_input_fields",
+    "model_input_sha256"
   ],
   "properties": {
-    "schema_version": {
-      "const": "1.0.0"
+    "schema_version": {"const": "2.0.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "command": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["completed", "failed"]},
+    "config_sha256": {"$ref": "#/$defs/sha256"},
+    "input_artifacts": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/sha256"}
     },
-    "run_id": {
-      "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    "software": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["particleml_version", "python_version", "git_commit"],
+      "properties": {
+        "particleml_version": {"const": "0.2.0"},
+        "python_version": {"type": "string"},
+        "git_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"}
+      }
     },
-    "study_id": {
-      "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    "model_input_fields": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
     },
-    "stage": {
-      "enum": ["E0.5", "E1", "E2", "E3"]
-    },
-    "status": {
-      "enum": ["succeeded", "failed", "timed_out", "interrupted"]
-    },
-    "created_at": {
-      "$ref": "#/$defs/timestamp"
-    },
-    "started_at": {
-      "$ref": "#/$defs/timestamp"
-    },
-    "ended_at": {
-      "$ref": "#/$defs/timestamp"
-    },
-    "git": {
-      "$ref": "#/$defs/git"
-    },
-    "data": {
-      "$ref": "#/$defs/data"
-    },
-    "condition": {
-      "$ref": "#/$defs/condition"
-    },
-    "model": {
-      "$ref": "#/$defs/model"
-    },
-    "hyperparameters": {
-      "$ref": "#/$defs/hyperparameters"
-    },
-    "environment": {
-      "$ref": "#/$defs/environment"
-    },
-    "timing": {
-      "$ref": "#/$defs/timing"
-    },
-    "metrics": {
-      "$ref": "#/$defs/metrics"
-    },
-    "artifacts": {
-      "$ref": "#/$defs/artifacts"
-    },
-    "failure": {
-      "oneOf": [
-        { "type": "null" },
-        { "$ref": "#/$defs/failure" }
-      ]
-    }
+    "model_input_sha256": {"$ref": "#/$defs/sha256"},
+    "error": {"type": ["string", "null"]}
   },
-  "allOf": [
-    {
-      "if": {
-        "properties": { "status": { "const": "succeeded" } },
-        "required": ["status"]
-      },
-      "then": {
-        "required": ["metrics"],
-        "properties": {
-          "failure": { "type": "null" },
-          "artifacts": {
-            "required": ["prediction_metadata"],
-            "properties": {
-              "prediction_metadata": { "$ref": "#/$defs/artifact" }
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": { "status": { "enum": ["failed", "timed_out", "interrupted"] } },
-        "required": ["status"]
-      },
-      "then": {
-        "properties": {
-          "failure": { "$ref": "#/$defs/failure" }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "model": {
-            "properties": {
-              "family": {
-                "enum": ["pretrained_omnilearned", "random_initialized_omnilearned"]
-              }
-            },
-            "required": ["family"]
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "model": {
-            "required": ["omnilearned_index"],
-            "properties": {
-              "omnilearned_index": { "$ref": "#/$defs/artifact" }
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "model": {
-            "properties": {
-              "family": { "const": "pretrained_omnilearned" }
-            },
-            "required": ["family"]
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "model": {
-            "required": ["checkpoint"],
-            "properties": {
-              "checkpoint": { "$ref": "#/$defs/checkpoint" }
-            }
-          }
-        }
-      }
-    }
-  ],
   "$defs": {
-    "timestamp": {
-      "type": "string",
-      "format": "date-time",
-      "pattern": "Z$"
-    },
-    "sha256": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
-    },
-    "artifact": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["path", "sha256"],
-      "properties": {
-        "path": { "type": "string", "minLength": 1 },
-        "sha256": { "$ref": "#/$defs/sha256" },
-        "byte_size": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "git": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["repository", "commit", "dirty"],
-      "properties": {
-        "repository": { "type": "string", "minLength": 1 },
-        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-        "dirty": { "type": "boolean" }
-      }
-    },
-    "data": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "dataset_name",
-        "source_manifest_sha256",
-        "canonical_dataset",
-        "split_manifest",
-        "preprocessing",
-        "view"
-      ],
-      "properties": {
-        "dataset_name": { "const": "CMS 2015 RunIIFall15MiniAODv2" },
-        "source_manifest_sha256": { "$ref": "#/$defs/sha256" },
-        "canonical_dataset": { "$ref": "#/$defs/artifact" },
-        "split_manifest": { "$ref": "#/$defs/artifact" },
-        "preprocessing": { "$ref": "#/$defs/artifact" },
-        "view": { "$ref": "#/$defs/artifact" },
-        "qcd_mixture_sha256": {
-          "oneOf": [
-            { "$ref": "#/$defs/sha256" },
-            { "type": "null" }
-          ]
-        }
-      }
-    },
-    "condition": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "feature_config",
-        "train_size_per_class",
-        "subset_id",
-        "subset_seed",
-        "model_seed"
-      ],
-      "properties": {
-        "feature_config": { "enum": ["A", "B", "C", "D"] },
-        "train_size_per_class": { "type": "integer", "minimum": 1 },
-        "subset_id": { "type": "string", "minLength": 1 },
-        "subset_seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
-        "model_seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
-      }
-    },
-    "checkpoint": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["source", "immutable_revision", "filename", "sha256", "license", "pretraining_corpus"],
-      "properties": {
-        "source": { "type": "string", "minLength": 1 },
-        "immutable_revision": { "type": "string", "minLength": 1 },
-        "filename": { "type": "string", "minLength": 1 },
-        "sha256": { "$ref": "#/$defs/sha256" },
-        "license": { "type": "string", "minLength": 1 },
-        "pretraining_corpus": { "type": "string", "minLength": 1 }
-      }
-    },
-    "tensor_load": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "checkpoint_shape", "model_shape"],
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "checkpoint_shape": {
-          "type": "array",
-          "items": { "type": "integer", "minimum": 0 }
-        },
-        "model_shape": {
-          "type": "array",
-          "items": { "type": "integer", "minimum": 0 }
-        },
-        "reason": { "type": "string", "minLength": 1 }
-      }
-    },
-    "model": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "family",
-        "repository",
-        "revision",
-        "adapter_policy",
-        "output_head",
-        "checkpoint",
-        "omnilearned_index",
-        "loaded_tensors",
-        "skipped_tensors",
-        "mismatched_tensors"
-      ],
-      "properties": {
-        "family": {
-          "enum": [
-            "pretrained_omnilearned",
-            "random_initialized_omnilearned",
-            "deep_sets_pfn"
-          ]
-        },
-        "repository": { "type": "string", "minLength": 1 },
-        "revision": { "type": "string", "minLength": 1 },
-        "adapter_policy": {
-          "enum": ["configuration_specific", "approved_neutralization", "native_baseline"]
-        },
-        "output_head": { "const": "binary_top_qcd" },
-        "checkpoint": {
-          "oneOf": [
-            { "type": "null" },
-            { "$ref": "#/$defs/checkpoint" }
-          ]
-        },
-        "omnilearned_index": {
-          "oneOf": [
-            { "type": "null" },
-            { "$ref": "#/$defs/artifact" }
-          ]
-        },
-        "loaded_tensors": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/tensor_load" }
-        },
-        "skipped_tensors": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/tensor_load" }
-        },
-        "mismatched_tensors": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/tensor_load" }
-        }
-      }
-    },
-    "hyperparameters": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["optimizer", "learning_rate", "batch_size", "max_epochs", "weight_decay", "early_stopping", "extra"],
-      "properties": {
-        "optimizer": { "type": "string", "minLength": 1 },
-        "learning_rate": { "type": "number", "exclusiveMinimum": 0 },
-        "batch_size": { "type": "integer", "minimum": 1 },
-        "max_epochs": { "type": "integer", "minimum": 1 },
-        "weight_decay": { "type": "number", "minimum": 0 },
-        "early_stopping": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["monitor", "mode", "patience", "min_delta"],
-          "properties": {
-            "monitor": { "type": "string", "minLength": 1 },
-            "mode": { "enum": ["min", "max"] },
-            "patience": { "type": "integer", "minimum": 0 },
-            "min_delta": { "type": "number", "minimum": 0 }
-          }
-        },
-        "extra": {
-          "type": "object",
-          "additionalProperties": {
-            "type": ["string", "number", "integer", "boolean", "null"]
-          }
-        }
-      }
-    },
-    "environment": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["python_version", "dependency_lock_sha256", "operating_system", "device", "deterministic_algorithms"],
-      "properties": {
-        "python_version": { "type": "string", "minLength": 1 },
-        "dependency_lock_sha256": { "$ref": "#/$defs/sha256" },
-        "operating_system": { "type": "string", "minLength": 1 },
-        "device": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["type", "name"],
-          "properties": {
-            "type": { "enum": ["cpu", "cuda", "mps", "other"] },
-            "name": { "type": "string", "minLength": 1 },
-            "driver": { "type": "string", "minLength": 1 }
-          }
-        },
-        "deterministic_algorithms": { "type": "boolean" },
-        "known_nondeterminism": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "uniqueItems": true
-        }
-      }
-    },
-    "timing": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["wall_seconds", "peak_gpu_memory_mib"],
-      "properties": {
-        "wall_seconds": { "type": "number", "minimum": 0 },
-        "peak_gpu_memory_mib": {
-          "oneOf": [
-            { "type": "number", "minimum": 0 },
-            { "type": "null" }
-          ]
-        }
-      }
-    },
-    "metrics": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "best_epoch",
-        "validation_auc",
-        "test_auc",
-        "test_accuracy",
-        "epsilon_b_at_epsilon_s_0_30",
-        "epsilon_b_at_epsilon_s_0_50",
-        "background_rejection_at_epsilon_s_0_30",
-        "background_rejection_at_epsilon_s_0_50"
-      ],
-      "properties": {
-        "best_epoch": { "type": "integer", "minimum": 0 },
-        "validation_auc": { "type": "number", "minimum": 0, "maximum": 1 },
-        "test_auc": { "type": "number", "minimum": 0, "maximum": 1 },
-        "test_accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
-        "epsilon_b_at_epsilon_s_0_30": { "type": "number", "minimum": 0, "maximum": 1 },
-        "epsilon_b_at_epsilon_s_0_50": { "type": "number", "minimum": 0, "maximum": 1 },
-        "background_rejection_at_epsilon_s_0_30": {
-          "oneOf": [
-            { "type": "number", "exclusiveMinimum": 0 },
-            { "type": "null" }
-          ]
-        },
-        "background_rejection_at_epsilon_s_0_50": {
-          "oneOf": [
-            { "type": "number", "exclusiveMinimum": 0 },
-            { "type": "null" }
-          ]
-        },
-        "validation_threshold": { "type": "number" },
-        "zero_background_pass_count_0_30": { "type": "integer", "minimum": 0 },
-        "zero_background_pass_count_0_50": { "type": "integer", "minimum": 0 },
-        "test_background_count": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "artifacts": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["run_directory", "resolved_config", "stdout_log", "stderr_log", "model_checkpoint", "prediction_metadata"],
-      "properties": {
-        "run_directory": { "type": "string", "minLength": 1 },
-        "resolved_config": { "$ref": "#/$defs/artifact" },
-        "stdout_log": { "$ref": "#/$defs/artifact" },
-        "stderr_log": { "$ref": "#/$defs/artifact" },
-        "model_checkpoint": {
-          "oneOf": [
-            { "type": "null" },
-            { "$ref": "#/$defs/artifact" }
-          ]
-        },
-        "prediction_metadata": {
-          "oneOf": [
-            { "type": "null" },
-            { "$ref": "#/$defs/artifact" }
-          ]
-        }
-      }
-    },
-    "failure": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["code", "phase", "message"],
-      "properties": {
-        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,63}$" },
-        "phase": { "type": "string", "minLength": 1 },
-        "message": { "type": "string", "minLength": 1 },
-        "traceback_path": { "type": "string", "minLength": 1 }
-      }
-    }
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
   }
 }

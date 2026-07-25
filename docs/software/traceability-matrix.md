@@ -1,109 +1,23 @@
-# particleML Requirements and Evidence Traceability Matrix
+# Traceability Matrix 2.0.0
 
-## Document Control
+| Requirement | Configuration or schema | Implementation | Test evidence |
+|---|---|---|---|
+| DATA-001 | `catalog-sources.yaml`, dataset-catalog schema | `catalog.py` | `test_catalog.py` |
+| DATA-002 | dataset-manifest schema | `ingestion.py` | `test_ingestion.py` |
+| DATA-003 | `analysis-v1.yaml` | `physics.py` | `test_physics.py` |
+| DATA-004 | dataset/split schemas | `ingestion.py`, `splits.py` | `test_ingestion.py`, `test_splits.py` |
+| DATA-005 | `analysis-v1.yaml` | `weights.py` | `test_weights.py` |
+| SPLIT-001 | split-manifest schema | `splits.py` | `test_splits.py` |
+| FEAT-001 | run-record schema | `features.py` | `test_features.py` |
+| MODEL-001 | model config | `models.py` | `test_models.py` |
+| MODEL-002 | prediction schema | `models.py` | `test_models.py` |
+| DDT-001 | DDT config | `decorrelation.py` | `test_decorrelation.py` |
+| DDT-002 | analysis-freeze schema | `decorrelation.py`, `blinding.py` | `test_decorrelation.py`, `test_blinding.py` |
+| FIT-001 | fit-result schema | `inference.py` | `test_inference.py` |
+| BLIND-001 | analysis-freeze schema | `blinding.py`, `cli.py` | `test_blinding.py`, `test_cli.py` |
+| ART-001 | completion record contract | `artifacts.py` | `test_artifacts.py` |
+| CLI-001 | command specification | `cli.py` | `test_cli.py` |
+| DOC-001 | documentation contract | `validate_software_docs.py` | CI documentation job |
 
-| Field | Value |
-|---|---|
-| Status | Approved traceability baseline; local implementation present; formal experiments deferred |
-| Document version | 1.2.0 |
-| Software documentation suite | 1.2.0 |
-| Research baseline | Research Plan v0.4.0 |
-| Date | 2026-07-18 |
-
-This matrix maps the [Software Requirements Specification](./requirements.md)
-to the [Software Architecture](./architecture.md),
-[Implementation Specification](./specification.md), planned tests, experiment
-gates, and paper evidence. `specified` means that a mapping exists; it does not
-mean the implementation, test, run, artifact, figure, or claim exists.
-
-## 1. Research Questions to Evidence
-
-| Research question | Software requirements | Required experiment evidence | Planned paper evidence | Status |
-|---|---|---|---|---|
-| RQ1: feature availability across A-D | FR-DATA-004, FR-DATA-005, FR-MODEL-003, FR-TRAIN-001, FR-EVAL-001, FR-EVAL-002 | E0 identity-equivalent views; E0.5 adapters; E2 paired matrix | Figure F1 AUC versus training scale; Figure F2 paired AUC deltas; Table T2 core matrix | `specified` |
-| RQ2: labeled-data efficiency | FR-DATA-008, FR-TRAIN-001, FR-EVAL-002, FR-EVAL-003 | Nested frozen subsets; E2 per-scale predictions and paired bootstrap | Figure F1; Table T3 `auc_gap_fraction` or raw-difference fallback | `specified` |
-| RQ3: robustness of feature ranking | FR-MODEL-006, FR-TRAIN-004, FR-EVAL-003, AC-E2-001, AC-E3-001 | Three core seeds and Deep Sets/PFN A-versus-D control | Figure F3 seed/baseline comparison; Table T4 robustness summary | `specified` |
-
-## 2. Requirement Traceability
-
-| Requirement | Architecture component | Specification contract | Planned automated test | Gate/artifact | Status |
-|---|---|---|---|---|---|
-| FR-DATA-001 | Manifest service | §2.1 Source Manifest | `tests/test_manifest.py::test_canonical_manifest_bytes_and_hash` | E0 `manifests/source-manifest.tsv` | `implemented` |
-| FR-DATA-002 | CMSSW extractor | §3.1 CMSSW Output | `tests/test_cmssw_contract.py`; qualified-host CMSSW fixture job pending | E0 compact ROOT and extraction report | `implemented` |
-| FR-DATA-003 | CMSSW extractor | §3.1; Research Plan §4.3-4.4 | `tests/test_cmssw_contract.py`; hand-inspected qualified-host truth fixtures pending | E0 label/cutflow audit | `implemented` |
-| FR-DATA-004 | Dataset service | §3.3 Canonical HDF5 | `tests/test_dataset.py::test_canonical_layout` | E0 canonical full-D HDF5 | `implemented` |
-| FR-DATA-005 | View service | §4.3 Materialized Views | `tests/test_views.py::test_ad_identity_equivalence`; PID sign/order test; `tests/test_software_document_contract.py` native integer-PID/obsolete-contract regression | E0 A-D view audit | `implemented` |
-| FR-DATA-006 | Manifest service | §2.2 Split Algorithm | `tests/test_manifest.py::test_exact_pfn_split_golden_vectors`; overlap fixtures | E0 split manifest and overlap report | `implemented` |
-| FR-DATA-007 | Dataset service | §4.1 Fitted State | `tests/test_dataset.py::test_fit_uses_train_only` | E0/E0.5 preprocessing policy | `implemented` |
-| FR-DATA-008 | Manifest/view services | §4.2 Training Subsets | `tests/test_views.py::test_balanced_nested_subsets` | split-manifest subset payloads | `implemented` |
-| FR-DATA-009 | Manifest/dataset services | §4.2 and preprocessing contract | manifest overlap/identity tests, dataset train-only fitting, and `tests/test_audit.py::test_forbidden_model_fields_are_rejected` | E0 mixture/confound report | `implemented` |
-| FR-DATA-010 | Dataset, metrics, and E0 aggregation services | §3.2-3.3; §6.2; §7-8 | `tests/test_audit.py` and `tests/test_e0.py` including shuffled-label, resource, and external-evidence gates | Schema-valid E0 data/yield/leakage/cost audit | `implemented` |
-| FR-MODEL-001 | `src/particleml/model_integration.py` external boundary | §5.1 Pinned External Dependency | `tests/test_model_integration.py::test_subprocess_boundary_uses_argument_array_shell_false_and_redacts`; formal environment pending | E0.5 dependency audit | `implemented` |
-| FR-MODEL-002 | `src/particleml/model_integration.py` index validator and CLI resolver | §5.2 Custom-Data Index | `tests/test_model_integration.py::test_index_required_and_hashed_and_stale_view_rejected`; official RunPod index pending | E0.5 index completion records | `implemented` |
-| FR-MODEL-003 | `adapter_flags`, `build_train_argv`, and tensor audit | §5.3 Adapter and Training Command | exact A-D native PID/additional-feature argv snapshots; conditional-flag rejection; tensor-shape report | E0.5 layer-loading audit | `implemented` |
-| FR-MODEL-004 | checkpoint validator, E0.5 contract, and gate aggregator | §5.1-5.3 | `tests/test_checkpoint.py`; A-D RunPod smoke still pending | E0.5 checkpoint audit | `implemented` |
-| FR-MODEL-005 | explicit fallback resolver and E0.5 model condition | §5.3 and claim eligibility | `tests/test_reporting.py::test_fallback_requires_explicit_approval_and_narrows_model_condition`; formal approval absent | E0.5 policy decision | `implemented` |
-| FR-MODEL-006 | `src/particleml/baseline.py` masked Deep Sets/PFN factory | §5.4 Baseline | mask/padding invariance, shape, frozen parameter-count, optional-PyTorch boundary, and E3 fixture-matrix tests; formal training pending | E3 baseline run records | `implemented` |
-| FR-TRAIN-001 | `src/particleml/experiment.py` gate and matrix resolver | §6; architecture §6.3 | `tests/test_experiment.py::test_gate_order_and_matrix`; formal gates remain blocked | E0-E3 gate ledger | `implemented` |
-| FR-TRAIN-002 | experiment CLI and deterministic dry-run ledger | §6.1-6.4 | dry-run, exact-key, stable-identity, and no-overwrite tests | resolved configs and completion records | `implemented` |
-| FR-TRAIN-003 | run-record contract and immutable publisher | §7 and run-record Schema | successful, failed, timed-out, and interrupted schema fixtures | every `runs/*/run-record.json` | `implemented` |
-| FR-TRAIN-004 | one-attempt lifecycle and matrix-status service | §9 Error Taxonomy | failure/interruption retention, no-auto-retry, and missing-condition tests | failed run records and logs | `implemented` |
-| FR-EVAL-001 | deterministic prediction publisher and array/payload validator | §7; prediction Schema | identity order, duplicate, target mismatch, finite-score, deterministic NPZ, metadata/payload hash, and completion-marker tests | prediction metadata and payload | `implemented` |
-| FR-EVAL-002 | centralized metrics service | §8.1 Per-Run Metrics | golden AUC/rejection/accuracy, zero-background, and unstable-ratio fixtures | E1-E3 run metrics | `implemented` |
-| FR-EVAL-003 | `paired_stratified_bootstrap` and seed-summary service | §8.2 Paired Comparisons | deterministic PCG64 stratified/common-index bootstrap, mismatch, contrast-set, percentile, and seed-summary fixtures | E2/E3 comparison artifacts | `implemented` |
-| FR-EVAL-004 | `src/particleml/reporting.py` evidence-only report builder | §7-8 | completed-input validation, aggregation completeness, failed/missing visibility, deterministic hash, and ineligible-claim tests | generated reports, figures, claim ledger | `implemented` |
-| FR-REP-001 | Contract validator/artifact lifecycle | architecture §8; spec §6.4-7 | `tests/test_artifacts.py` content-hash, completion, and stale-resume tests | hashes and `COMPLETED.json` | `implemented` |
-| FR-REP-002 | Contract validator | §7 Serialized Contracts | `scripts/validate_software_docs.py`; schema fixtures | five JSON Schemas and validated artifacts | `implemented` |
-| FR-REP-003 | reporting status/claim ledger and this traceability matrix | requirements §3; reporting contract | status monotonicity, fallback narrowing, E3 deferral, and unverified-dependency tests | matrix and claim ledger | `implemented` |
-| NFR-COR-001 | All fail-closed boundaries | §9 Error Taxonomy | negative contract/leakage/unit/identity fixtures | failed gate/run records | `implemented` |
-| NFR-DET-001 | Manifest, views, orchestration, metrics | §2.2, §4.2, §8.2 | repeated hash/subset/bootstrap regression tests | deterministic hashes and seed records | `implemented` |
-| NFR-PORT-001 | Execution topology | architecture §3; spec §3.1 | environment-record validation; compact local fixtures | CMSSW and ML environment records | `implemented` |
-| NFR-OBS-001 | Extractor/orchestrator | requirements §5; run timing contract | resource projection and run-record timing/memory contract tests | E0 cost table and E1 budget projection | `implemented` |
-| NFR-ROB-001 | Artifact lifecycle | architecture §8; spec §6.4 | partial-output and completion-sentinel tests | `COMPLETED.json` and retained failures | `implemented` |
-| NFR-MNT-001 | Component model | architecture §4 | package import, CLI, and component-focused tests | package/test structure | `implemented` |
-| NFR-PUB-001 | evidence-only reporting and traceability | architecture §7; spec §7-8 | planned/failed/incomplete claim-eligibility and deterministic rebuild tests | claim ledger and generated evidence | `implemented` |
-| AC-E0-001 | E0 control path | requirements §6; architecture §6.3; specification §6.2 and §7 | local aggregation/fixture non-promotion tests pass; qualified-host acceptance absent | completed, schema-valid E0 audit | `deferred` |
-| AC-E05-001 | E0.5 control path | requirements §6; spec §5 | local checkpoint/adapter/fixture non-promotion tests pass; authorized RunPod evidence absent | completed, schema-valid E0.5 audit | `deferred` |
-| AC-E1-001 | E1 control path | requirements §6; spec §6-8 | local four-condition matrix/lifecycle/metric fixtures pass; formal pilot absent | pilot run/prediction records and budget | `deferred` |
-| AC-E2-001 | E2 control path | requirements §6; spec §8 | local 36-condition matrix and paired-statistics tests pass; formal matrix absent | core run matrix and comparison artifacts | `deferred` |
-| AC-E3-001 | E3 control path | requirements §6; spec §5.4 and §8 | local six-condition fixture and mask/report tests pass; PyTorch/RunPod runs absent | Deep Sets/PFN run and comparison artifacts | `deferred` |
-
-## 3. Experiment Gates to Publication Evidence
-
-| Gate | Required retained artifacts | Planned figure/table dependency | Eligible claim only after pass | Current status |
-|---|---|---|---|---|
-| E0 | source/split manifests, compact ROOT, canonical HDF5, preprocessing policy, data/yield/leakage/cost audit | T1 dataset and audit summary; Methods data pipeline | The selected CMS 2015 corpus can support the frozen downstream protocol | `deferred` |
-| E0.5 | checkpoint identity, license and corpus record, index hashes, layer-load report, A-D finite smoke results, tiny-loss trace | Methods model integration; reproducibility appendix | The same pretrained backbone is defensibly adapted across A-D, or the claim is explicitly narrowed | `deferred` |
-| E1 | A/D pilot run records, aligned predictions, metrics, timing/memory/storage, budget | pilot diagnostics are not primary paper results | The clean-command pipeline and resource projection are adequate for E2 | `deferred` |
-| E2 | complete A-D/scale/seed ledger, successful and failed records, predictions, paired statistics | F1, F2, T2, T3 | RQ1/RQ2 results under the frozen protocol | `deferred` |
-| E3 | Deep Sets/PFN A/D records and paired statistics; optional random-initialization records | F3, T4 | Feature ranking robustness beyond the primary measurement system | `deferred` |
-
-## 4. Planned Paper Evidence Definitions
-
-| ID | Planned evidence | Inputs | Integrity constraint | Status |
-|---|---|---|---|---|
-| T1 | Dataset, split, yield, missingness, and cost summary | E0 audits and manifests | Values are generated from retained audits, not copied by hand | `specified` |
-| F1 | AUC and background rejection versus training size for A-D | E2 schema-valid runs | Show every seed and uncertainty convention | `specified` |
-| F2 | Paired A-B, B-C, C-D, C-A, and D-A deltas | aligned E2 predictions | Exact test identity equality and paired bootstrap required | `specified` |
-| T2 | Complete core condition matrix | all E2 run records | Failed/missing conditions remain visible | `specified` |
-| T3 | Data-efficiency summary | E2 scale predictions | Use frozen `n_max`; replace unstable ratio with raw differences | `specified` |
-| F3 | Seed and baseline robustness comparison | E2 plus required E3 baseline | Do not generalize beyond tested conditions | `specified` |
-| T4 | Checkpoint, adapter, environment, and reproducibility appendix | E0.5 audits and all formal run records | Mutable nicknames without hashes are prohibited | `specified` |
-
-The permitted high-level manuscript framing is a dataset-record-disjoint
-cross-corpus adaptation study under controlled feature availability. It is not
-an unseen-class, cross-detector, universal causal feature-importance, or broad
-foundation-model-superiority claim.
-
-## 5. Maintenance Rules
-
-- Every active requirement ID must appear exactly once in Section 2.
-- A test or artifact path in this matrix may be planned; its status must remain
-  `specified` until repository evidence exists.
-- `implemented` requires an identified code/document artifact.
-- `verified` requires an identified passing automated check or retained gate
-  artifact.
-- A failed or deferred upstream item prevents stronger downstream status.
-- Changes to research questions, endpoints, `n_max`, dataset, labels, or split
-  require the corresponding Research Plan v0.4.x amendment before this matrix
-  is updated.
+Rows for formal science results remain absent until retained artifacts exist.
+Implementation tests establish behavior, not physics performance.

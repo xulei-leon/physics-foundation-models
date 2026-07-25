@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "particleml-research"
-version = "0.1.0"
-description = "Reproducible software for the particleML jet-physics research program."
+version = "0.2.0"
+description = "Reproducible ATLAS Open Data H-to-ZZ-to-four-lepton ML analysis."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
@@ -21,10 +21,20 @@ classifiers = [
 ]
 dependencies = [
   "awkward>=2.7,<3",
-  "h5py>=3.11,<4",
+  "httpx>=0.28,<1",
   "jsonschema>=4.23,<5",
+  "matplotlib>=3.9,<4",
+  "mplhep>=0.4,<1",
   "numpy>=1.26,<2",
+  "pandas>=2.2,<3",
+  "pyarrow>=17,<22",
+  "pyhf>=0.7.6,<1",
+  "pyyaml>=6.0,<7",
+  "scikit-learn>=1.5,<2",
+  "scipy>=1.13,<2",
+  "shap>=0.46,<1",
   "uproot>=5.4,<6",
+  "xgboost>=2.1,<4",
 ]
 
 [project.optional-dependencies]
@@ -32,23 +42,25 @@ ci = [
   "awkward>=2.7,<3",
   "build>=1.2,<2",
   "hatchling>=1.27,<2",
-  "h5py>=3.11,<4",
+  "httpx>=0.28,<1",
   "jsonschema>=4.23,<5",
+  "matplotlib>=3.9,<4",
+  "mplhep>=0.4,<1",
   "mypy>=1.14,<2",
   "numpy>=1.26,<2",
   "packaging>=26,<27",
+  "pandas>=2.2,<3",
+  "pyarrow>=17,<22",
+  "pyhf>=0.7.6,<1",
+  "pyyaml>=6.0,<7",
   "pytest>=8.3,<9",
   "ruff>=0.9,<1",
+  "scikit-learn>=1.5,<2",
+  "scipy>=1.13,<2",
+  "shap>=0.46,<1",
   "types-jsonschema>=4.23,<5",
   "uproot>=5.4,<6",
-]
-runpod = [
-  "awkward>=2.7,<3",
-  "h5py>=3.11,<4",
-  "jsonschema>=4.23,<5",
-  "numpy>=1.26,<2",
-  "pyyaml>=6.0,<7",
-  "uproot>=5.4,<6",
+  "xgboost>=2.1,<4",
 ]
 
 [project.scripts]
@@ -58,7 +70,7 @@ particleml = "particleml.cli:entrypoint"
 packages = ["src/particleml"]
 
 [tool.pytest.ini_options]
-addopts = "-ra --ignore=tests/test_literature_dossier.py"
+addopts = "-ra"
 pythonpath = ["src"]
 testpaths = ["tests"]
 
@@ -66,10 +78,6 @@ testpaths = ["tests"]
 target-version = "py310"
 line-length = 100
 include = ["src/particleml/**/*.py", "scripts/**/*.py", "tests/**/*.py"]
-extend-exclude = [
-  "tests/test_literature_dossier.py",
-  "tests/test_pretrained_omnilearn_pet_practice.py",
-]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]

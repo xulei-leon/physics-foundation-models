@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://particleml.local/schemas/2.0.0/dataset-catalog.schema.json",
+  "title": "particleML dataset catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "catalog_id", "created_at", "records", "files"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "catalog_id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "records": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["record_id", "kind", "metadata_url"],
+        "properties": {
+          "record_id": {"enum": ["atlas-93924", "atlas-93928"]},
+          "kind": {"enum": ["data", "mc"]},
+          "metadata_url": {"type": "string", "pattern": "^https://"}
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/file"}
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id",
+        "record_id",
+        "url",
+        "sha256",
+        "size_bytes",
+        "is_data",
+        "process_group"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "record_id": {"enum": ["atlas-93924", "atlas-93928"]},
+        "url": {"type": "string", "pattern": "^https://"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "is_data": {"type": "boolean"},
+        "process_group": {
+          "enum": ["data", "signal", "irreducible_background", "reducible_background"]
+        },
+        "generator_group": {"type": ["string", "null"]},
+        "is_nominal": {"type": "boolean", "default": true}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"is_data": {"const": true}}},
+          "then": {
+            "properties": {
+              "record_id": {"const": "atlas-93924"},
+              "process_group": {"const": "data"}
+            }
+          },
+          "else": {
+            "properties": {"record_id": {"const": "atlas-93928"}},
+            "required": ["generator_group", "is_nominal"]
+          }
+        }
+      ]
+    }
+  }
+}

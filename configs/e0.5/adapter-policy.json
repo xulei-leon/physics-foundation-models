@@ -1,9 +1,0 @@
-{
-  "schema_version": "1.0.0",
-  "A": [],
-  "B": ["--use-add", "--num-add", "1"],
-  "C": ["--use-pid", "--pid_idx", "4", "--use-add", "--num-add", "1"],
-  "D": ["--use-pid", "--pid_idx", "4", "--use-add", "--num-add", "5"],
-  "conditional_inputs": false,
-  "global_inputs": false
-}

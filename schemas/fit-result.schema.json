@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://particleml.local/schemas/2.0.0/fit-result.schema.json",
+  "title": "particleML profile-likelihood fit result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fit_id",
+    "mode",
+    "created_at",
+    "workspace_sha256",
+    "channels",
+    "mu_hat",
+    "mu_interval",
+    "significance",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "fit_id": {"type": "string", "minLength": 1},
+    "mode": {"enum": ["expected", "observed"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "workspace_sha256": {"$ref": "#/$defs/sha256"},
+    "freeze_sha256": {"$ref": "#/$defs/sha256"},
+    "channels": {
+      "const": ["4e_low", "4e_high", "4mu_low", "4mu_high", "2e2mu_low", "2e2mu_high"]
+    },
+    "mu_hat": {"type": "number"},
+    "mu_interval": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "items": false
+    },
+    "significance": {"type": "number"},
+    "status": {"enum": ["completed", "failed"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"mode": {"const": "observed"}}},
+      "then": {"required": ["freeze_sha256"]}
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

@@ -1,0 +1,86 @@
+schema_version: "2.0.0"
+analysis_id: atlas-h4l-v1
+research_plan_version: "1.0.0"
+luminosity_pb: 36000.0
+blinding:
+  analysis_min_gev: 105.0
+  analysis_max_gev: 160.0
+  signal_min_gev: 120.0
+  signal_max_gev: 130.0
+selection:
+  lepton_count: 4
+  ordered_pt_min_gev: [20.0, 15.0, 10.0, 7.0]
+  electron_abs_eta_max: 2.47
+  muon_abs_eta_max: 2.7
+  z1_min_gev: 50.0
+  z1_max_gev: 106.0
+  z2_min_gev: 12.0
+  z2_max_gev: 115.0
+  sfos_min_gev: 5.0
+  z_mass_gev: 91.1876
+split:
+  algorithm: sha256-bucket-v1
+  train: 0.7
+  calibration: 0.1
+  validation: 0.1
+  test: 0.1
+models:
+  formal_seeds: [17, 42, 314, 2026, 2718]
+  tuning_seed: 42
+  logistic:
+    C: 1.0
+    max_iter: 2000
+  xgboost:
+    n_estimators: 400
+    max_depth: 3
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_lambda: 1.0
+  mlp:
+    hidden_layer_sizes: [64, 32]
+    alpha: 0.0001
+    max_iter: 500
+features:
+  primary:
+    - lep1_pt_fraction
+    - lep2_pt_fraction
+    - lep3_pt_fraction
+    - lep4_pt_fraction
+    - z1_delta_eta
+    - z1_delta_phi_sin
+    - z1_delta_phi_cos
+    - z1_delta_r
+    - z2_delta_eta
+    - z2_delta_phi_sin
+    - z2_delta_phi_cos
+    - z2_delta_r
+    - z1_mass_fraction
+    - z2_mass_fraction
+    - h_pt_fraction
+    - met_fraction
+    - jet_n
+    - leading_jet_pt_fraction
+    - dijet_mass_fraction
+    - costheta_star
+    - costheta1
+    - costheta2
+    - phi
+    - phi1
+    - channel_4e
+    - channel_4mu
+    - channel_2e2mu
+ddt:
+  initial_bin_width_gev: 5.0
+  minimum_effective_events: 200.0
+  threshold: 0.8
+  max_abs_spearman: 0.05
+  sideband_acceptance_min: 0.15
+  sideband_acceptance_max: 0.25
+  max_spurious_signal_sigma: 0.2
+fit:
+  mass_bin_width_gev: 1.0
+  luminosity_uncertainty: 0.021
+  signal_theory_uncertainty: 0.05
+  irreducible_background_uncertainty: 0.10
+  reducible_background_uncertainty: 0.50

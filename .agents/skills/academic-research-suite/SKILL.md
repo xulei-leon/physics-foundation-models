@@ -2,7 +2,7 @@
 name: academic-research-suite
 description: >
   Project-specific Academic Research Suite router for particleML research,
-  computational physics, jet-physics foundation models, HEP machine learning,
+  computational physics, four-lepton Higgs classification, HEP machine learning,
   literature review, experiment planning, benchmark interpretation, manuscript
   drafting, paper revision, citation verification, reviewer simulation, and
   research-to-paper workflows. Use when the user asks for research question
@@ -40,25 +40,25 @@ upstream workflow as a separate skill.
 
 ## Project Context
 
-Assume the project is a computational physics research portfolio focused on
-foundation model architectures for jet physics in high-energy physics.
+Assume the project is a computational physics research portfolio focused on a
+blinded four-lepton Higgs analysis using the ATLAS 2015+2016 education release.
 
 Core project frame:
 
-- Research goal: compare and develop neural backbones that support jet tagging,
-  generation, anomaly detection, and transfer learning.
-- Reference direction: OmniJet-alpha style autoregressive token models versus
-  OmniLearn or Point-Edge-Transformer style continuous set-based models.
-- Primary dataset: JetClass HDF5 files with particle-level `data`, jet-level
-  `jet`, and label `pid` datasets.
-- Standard baseline: binary top-tagging, top quark jets versus QCD background.
-- Jet representation: particles as sets or sequences of four-momentum features
-  such as pT, eta, phi, mass, with optional particle ID or charge features.
-- Metrics: accuracy and AUC for classification, Wasserstein distance for
-  generation quality, and standard errors from repeated seeded runs when
-  comparing methods.
+- Research goal: compare cut-based, linear, boosted-tree, and small neural
+  classifiers under a fixed selection and validated mass-decorrelation protocol.
+- Primary endpoint: expected profile-likelihood significance improvement of
+  XGBoost-DDT relative to the cut-based baseline.
+- Dataset: public 13 TeV, 36 fb\(^{-1}\), `exactly4lep` data and simulation,
+  ingested from frozen direct-HTTPS manifests into event-level Parquet.
+- Statistical model: three final states by low/high DDT category, with binned
+  four-lepton mass and limited pedagogical systematic uncertainties.
+- Reproducibility: deterministic event hashing, five formal seeds, immutable
+  artifacts, schema-validated provenance, and a mandatory analysis freeze.
+- Scientific boundary: never present planned experiments as results or describe
+  the education release as an experiment-grade discovery or precision analysis.
 - Researcher profile: undergraduate computational physics researcher building
-  deep learning expertise for physics graduate applications.
+  collider-physics ML and statistical-inference expertise.
 
 When giving research advice, connect recommendations to this project frame
 instead of producing generic academic-writing advice.
@@ -90,9 +90,9 @@ Apply these before the general router:
 - If the user asks to interpret training curves, AUC tables, Wasserstein
   distances, ablations, or seeded-run results, route to `ars/experiment-agent/WORKFLOW.md`
   and then, only if needed, `ars/academic-paper/WORKFLOW.md` for prose.
-- If the user asks for a literature review around OmniJet, OmniLearn, PET,
-  JetClass, top-tagging, anomaly detection, or jet generation, route to
-  `ars/deep-research/WORKFLOW.md` in literature-review mode.
+- If the user asks for literature on four-lepton Higgs classification,
+  mass-decorrelated classifiers, profile likelihoods, or public collider data,
+  route to `ars/deep-research/WORKFLOW.md` in literature-review mode.
 - If the user asks for a manuscript, proposal, or paper but lacks either a clear
   research question, experiment plan, or preliminary results, do not draft a full
   paper. First produce the missing research plan or evidence checklist.
