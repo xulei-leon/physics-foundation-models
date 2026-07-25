@@ -54,6 +54,28 @@ class FourVector:
             raise PhysicsError(f"unphysical four-vector mass squared: {mass_squared}")
         return math.sqrt(max(0.0, mass_squared))
 
+    @property
+    def spatial(self) -> tuple[float, float, float]:
+        return (self.px, self.py, self.pz)
+
+    def boost_to_frame(self, beta: tuple[float, float, float]) -> FourVector:
+        """Lorentz-transform into a frame moving with velocity beta."""
+
+        beta_squared = _dot(beta, beta)
+        if beta_squared >= 1.0:
+            raise PhysicsError("Lorentz boost velocity is not subluminal")
+        if beta_squared == 0:
+            return self
+        gamma = 1.0 / math.sqrt(1.0 - beta_squared)
+        beta_dot_p = _dot(beta, self.spatial)
+        factor = (gamma - 1.0) * beta_dot_p / beta_squared - gamma * self.energy
+        return FourVector(
+            self.px + factor * beta[0],
+            self.py + factor * beta[1],
+            self.pz + factor * beta[2],
+            gamma * (self.energy - beta_dot_p),
+        )
+
 
 @dataclass(frozen=True)
 class Lepton:
@@ -204,6 +226,107 @@ def _sum_vectors(vectors: Iterable[FourVector]) -> FourVector:
     return total
 
 
+def _dot(left: tuple[float, float, float], right: tuple[float, float, float]) -> float:
+    return sum(a * b for a, b in zip(left, right, strict=True))
+
+
+def _cross(
+    left: tuple[float, float, float], right: tuple[float, float, float]
+) -> tuple[float, float, float]:
+    return (
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    )
+
+
+def _norm(vector: tuple[float, float, float]) -> float:
+    return math.sqrt(_dot(vector, vector))
+
+
+def _unit(vector: tuple[float, float, float]) -> tuple[float, float, float]:
+    magnitude = _norm(vector)
+    if magnitude == 0:
+        return (0.0, 0.0, 0.0)
+    return (
+        vector[0] / magnitude,
+        vector[1] / magnitude,
+        vector[2] / magnitude,
+    )
+
+
+def _divide_vector(
+    vector: tuple[float, float, float], denominator: float
+) -> tuple[float, float, float]:
+    return (
+        vector[0] / denominator,
+        vector[1] / denominator,
+        vector[2] / denominator,
+    )
+
+
+def _negate_vector(vector: tuple[float, float, float]) -> tuple[float, float, float]:
+    return (-vector[0], -vector[1], -vector[2])
+
+
+def _signed_plane_angle(
+    left_normal: tuple[float, float, float],
+    right_normal: tuple[float, float, float],
+    axis: tuple[float, float, float],
+) -> float:
+    left = _unit(left_normal)
+    right = _unit(right_normal)
+    if _norm(left) == 0 or _norm(right) == 0:
+        return 0.0
+    return math.atan2(_dot(axis, _cross(left, right)), _dot(left, right))
+
+
+def decay_angles(leptons: Sequence[Lepton], pairing: Pairing) -> dict[str, float]:
+    """Compute a deterministic five-angle H-to-ZZ parameterization."""
+
+    by_index = {lepton.index: lepton for lepton in leptons}
+    z1_leptons = sorted(
+        (by_index[index] for index in pairing.z1.indices),
+        key=lambda lepton: (lepton.charge != -1, lepton.index),
+    )
+    z2_leptons = sorted(
+        (by_index[index] for index in pairing.z2.indices),
+        key=lambda lepton: (lepton.charge != -1, lepton.index),
+    )
+    z1 = _sum_vectors(lepton.vector for lepton in z1_leptons)
+    z2 = _sum_vectors(lepton.vector for lepton in z2_leptons)
+    higgs = z1 + z2
+    if higgs.energy <= 0 or z1.energy <= 0 or z2.energy <= 0:
+        raise PhysicsError("decay-angle boost requires positive energy")
+    beta_h = _divide_vector(higgs.spatial, higgs.energy)
+    h_leptons = [lepton.vector.boost_to_frame(beta_h) for lepton in z1_leptons + z2_leptons]
+    z1_h = h_leptons[0] + h_leptons[1]
+    z1_axis = _unit(z1_h.spatial)
+    costheta_star = max(-1.0, min(1.0, z1_axis[2]))
+
+    beta_z1 = _divide_vector(z1.spatial, z1.energy)
+    beta_z2 = _divide_vector(z2.spatial, z2.energy)
+    l1_z1 = z1_leptons[0].vector.boost_to_frame(beta_z1)
+    other_z1 = z2.boost_to_frame(beta_z1)
+    l2_z2 = z2_leptons[0].vector.boost_to_frame(beta_z2)
+    other_z2 = z1.boost_to_frame(beta_z2)
+    costheta1 = _dot(_unit(l1_z1.spatial), _unit(_negate_vector(other_z1.spatial)))
+    costheta2 = _dot(_unit(l2_z2.spatial), _unit(_negate_vector(other_z2.spatial)))
+
+    plane1 = _cross(h_leptons[0].spatial, h_leptons[1].spatial)
+    plane2 = _cross(h_leptons[2].spatial, h_leptons[3].spatial)
+    phi = _signed_plane_angle(plane1, plane2, z1_axis)
+    production_plane = _cross((0.0, 0.0, 1.0), z1_axis)
+    phi1 = _signed_plane_angle(production_plane, plane1, z1_axis)
+    return {
+        "costheta_star": costheta_star,
+        "costheta1": max(-1.0, min(1.0, costheta1)),
+        "costheta2": max(-1.0, min(1.0, costheta2)),
+        "phi": phi,
+        "phi1": phi1,
+    }
+
+
 def selection_from_config(config: Mapping[str, object]) -> Selection:
     """Construct selection thresholds from the strict analysis config."""
 
@@ -280,7 +403,9 @@ def select_four_lepton_event(
     by_index = {lepton.index: lepton for lepton in ordered}
     z1_leptons = [by_index[index] for index in pairing.z1.indices]
     z2_leptons = [by_index[index] for index in pairing.z2.indices]
+    angles = decay_angles(ordered, pairing)
     return {
+        **angles,
         "channel": final_state(ordered),
         "m4l": m4l,
         "m_z1": pairing.z1.mass,
@@ -292,6 +417,8 @@ def select_four_lepton_event(
         "lep_eta": [lepton.eta for lepton in ordered],
         "lep_phi": [lepton.phi for lepton in ordered],
         "lep_energy": [lepton.energy for lepton in ordered],
+        "lep_charge": [lepton.charge for lepton in ordered],
+        "lep_flavor": [lepton.flavor for lepton in ordered],
         "z1_delta_eta": z1_leptons[0].eta - z1_leptons[1].eta,
         "z1_delta_phi": delta_phi(z1_leptons[0].phi, z1_leptons[1].phi),
         "z1_delta_r": delta_r(z1_leptons[0], z1_leptons[1]),

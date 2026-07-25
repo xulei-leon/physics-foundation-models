@@ -52,6 +52,8 @@ jsonschema==4.26.0
     # via particleml-research (pyproject.toml)
 jsonschema-specifications==2025.9.1
     # via jsonschema
+joblib==1.5.3
+    # via scikit-learn
 librt==0.13.0 ; platform_python_implementation != 'PyPy'
     # via mypy
 mypy==1.20.2
@@ -112,6 +114,13 @@ rpds-py==2026.6.3 ; python_full_version >= '3.11'
     #   referencing
 ruff==0.15.22
     # via particleml-research (pyproject.toml)
+scikit-learn==1.7.2
+    # via particleml-research (pyproject.toml)
+scipy==1.15.3
+    # via
+    #   particleml-research (pyproject.toml)
+    #   scikit-learn
+    #   xgboost
 six==1.17.0
     # via python-dateutil
 tomli==2.4.1 ; python_full_version < '3.11'
@@ -120,6 +129,8 @@ tomli==2.4.1 ; python_full_version < '3.11'
     #   hatchling
     #   mypy
     #   pytest
+threadpoolctl==3.6.0
+    # via scikit-learn
 trove-classifiers==2026.6.1.19
     # via hatchling
 types-jsonschema==4.26.0.20260518
@@ -137,5 +148,7 @@ uproot==5.7.5
     # via particleml-research (pyproject.toml)
 xxhash==3.8.1
     # via uproot
+xgboost==3.3.0
+    # via particleml-research (pyproject.toml)
 zipp==4.1.0 ; python_full_version < '3.12'
     # via importlib-metadata
