@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -55,7 +56,7 @@ class DDTCalibrator:
         """Serialize the fitted calibration without executable state."""
 
         return {
-            "schema_version": "2.0.0",
+            "schema_version": "2.1.0",
             "mass_min": self.mass_min,
             "mass_max": self.mass_max,
             "initial_width": self.initial_width,
@@ -78,7 +79,7 @@ class DDTCalibrator:
         """Restore a serialized calibration with structural checks."""
 
         raw_bins = document.get("bins")
-        if document.get("schema_version") != "2.0.0" or not isinstance(raw_bins, list):
+        if document.get("schema_version") != "2.1.0" or not isinstance(raw_bins, list):
             raise ContractError("DDT_DOCUMENT", "invalid DDT calibration document")
         bins: list[ConditionalCDFBin] = []
         for raw in raw_bins:
@@ -304,15 +305,17 @@ def spearman_gate(
     scores: np.ndarray[Any, np.dtype[np.float64]],
     masses: np.ndarray[Any, np.dtype[np.float64]],
     maximum_absolute_rho: float = 0.05,
-) -> tuple[float, bool]:
+) -> tuple[float | None, bool]:
     """Evaluate the unweighted rank-correlation gate."""
 
     if len(scores) < 3:
         raise ContractError("DDT_GATE_SAMPLE", "Spearman gate requires at least three events")
+    if np.all(scores == scores[0]) or np.all(masses == masses[0]):
+        return None, False
     result = spearmanr(scores, masses)
     rho = float(result.statistic)
     if not np.isfinite(rho):
-        return rho, False
+        return None, False
     return rho, abs(rho) < maximum_absolute_rho
 
 
@@ -322,20 +325,48 @@ def sideband_acceptance_gate(
     minimum: float = 0.15,
     maximum: float = 0.25,
     bin_width: float = 5.0,
+    bin_ranges: Sequence[Mapping[str, object]] | None = None,
+    analysis_min: float = 105.0,
+    analysis_max: float = 160.0,
+    signal_min: float = 120.0,
+    signal_max: float = 130.0,
 ) -> tuple[dict[str, float], bool]:
     """Check high-score acceptance in every populated channel/sideband bin."""
 
-    sideband = ((frame["m4l"] >= 105.0) & (frame["m4l"] < 120.0)) | (
-        (frame["m4l"] >= 130.0) & (frame["m4l"] < 160.0)
+    sideband = ((frame["m4l"] >= analysis_min) & (frame["m4l"] < signal_min)) | (
+        (frame["m4l"] >= signal_max) & (frame["m4l"] < analysis_max)
     )
     selected = frame.loc[sideband].copy()
     if selected.empty:
         raise ContractError("DDT_GATE_SAMPLE", "sideband acceptance sample is empty")
-    selected["mass_bin"] = (
-        np.floor((selected["m4l"].astype(float) - 105.0) / bin_width).astype(int)
-    )
     acceptances: dict[str, float] = {}
-    for (channel, mass_bin), group in selected.groupby(["channel", "mass_bin"], sort=True):
+    groups: list[tuple[str, pd.DataFrame]] = []
+    if bin_ranges is None:
+        selected["mass_bin"] = (
+            np.floor((selected["m4l"].astype(float) - analysis_min) / bin_width).astype(
+                int
+            )
+        )
+        groups = [
+            (f"{channel}:{int(mass_bin)}", group)
+            for (channel, mass_bin), group in selected.groupby(
+                ["channel", "mass_bin"],
+                sort=True,
+            )
+        ]
+    else:
+        for item in bin_ranges:
+            channel = str(item["channel"])
+            low = float(str(item["low"]))
+            upper = float(str(item["high"]))
+            group = selected[
+                (selected["channel"].astype(str) == channel)
+                & (selected["m4l"].astype(float) >= low)
+                & (selected["m4l"].astype(float) < upper)
+            ]
+            if not group.empty:
+                groups.append((f"{channel}:{low:g}:{upper:g}", group))
+    for label, group in groups:
         if "w_yield" in group and not group["is_data"].astype(bool).all():
             weights = np.abs(np.asarray(group["w_yield"], dtype=np.float64))
         else:
@@ -343,9 +374,9 @@ def sideband_acceptance_gate(
         total = float(np.sum(weights))
         if total <= 0:
             continue
-        high = np.asarray(group["ddt_score"], dtype=np.float64) >= threshold
-        acceptance = float(np.sum(weights[high]) / total)
-        acceptances[f"{channel}:{int(mass_bin)}"] = acceptance
+        high_mask = np.asarray(group["ddt_score"], dtype=np.float64) >= threshold
+        acceptance = float(np.sum(weights[high_mask]) / total)
+        acceptances[label] = acceptance
     passed = bool(acceptances) and all(
         minimum <= acceptance <= maximum for acceptance in acceptances.values()
     )
@@ -357,6 +388,15 @@ def evaluate_decorrelation_gates(
     data_sideband: pd.DataFrame,
     spurious_signal_sigma: float,
     maximum_absolute_rho: float = 0.05,
+    threshold: float = 0.8,
+    acceptance_minimum: float = 0.15,
+    acceptance_maximum: float = 0.25,
+    maximum_spurious_signal_sigma: float = 0.2,
+    bin_ranges: Sequence[Mapping[str, object]] | None = None,
+    analysis_min: float = 105.0,
+    analysis_max: float = 160.0,
+    signal_min: float = 120.0,
+    signal_max: float = 130.0,
 ) -> dict[str, object]:
     """Evaluate every hard gate and return an unblinding-ready record."""
 
@@ -370,19 +410,53 @@ def evaluate_decorrelation_gates(
         np.asarray(data_sideband["m4l"], dtype=np.float64),
         maximum_absolute_rho,
     )
-    mc_acceptance, mc_acceptance_passed = sideband_acceptance_gate(background_mc)
-    data_acceptance, data_acceptance_passed = sideband_acceptance_gate(data_sideband)
-    spurious_passed = abs(spurious_signal_sigma) < 0.2
+    mc_acceptance, mc_acceptance_passed = sideband_acceptance_gate(
+        background_mc,
+        threshold=threshold,
+        minimum=acceptance_minimum,
+        maximum=acceptance_maximum,
+        bin_ranges=bin_ranges,
+        analysis_min=analysis_min,
+        analysis_max=analysis_max,
+        signal_min=signal_min,
+        signal_max=signal_max,
+    )
+    data_acceptance, data_acceptance_passed = sideband_acceptance_gate(
+        data_sideband,
+        threshold=threshold,
+        minimum=acceptance_minimum,
+        maximum=acceptance_maximum,
+        bin_ranges=bin_ranges,
+        analysis_min=analysis_min,
+        analysis_max=analysis_max,
+        signal_min=signal_min,
+        signal_max=signal_max,
+    )
+    spurious_value = abs(spurious_signal_sigma)
+    spurious_passed = spurious_value < maximum_spurious_signal_sigma
     return {
-        "mc_spearman": {"value": mc_rho, "passed": mc_passed},
-        "data_sideband_spearman": {"value": data_rho, "passed": data_passed},
+        "mc_spearman": {
+            "value": mc_rho,
+            "maximum_absolute": maximum_absolute_rho,
+            "passed": mc_passed,
+        },
+        "data_sideband_spearman": {
+            "value": data_rho,
+            "maximum_absolute": maximum_absolute_rho,
+            "passed": data_passed,
+        },
         "sideband_acceptance": {
-            "mc": mc_acceptance,
-            "data": data_acceptance,
+            "values": {
+                **{f"mc:{key}": value for key, value in mc_acceptance.items()},
+                **{f"data:{key}": value for key, value in data_acceptance.items()},
+            },
+            "minimum": acceptance_minimum,
+            "maximum": acceptance_maximum,
             "passed": mc_acceptance_passed and data_acceptance_passed,
         },
         "spurious_signal": {
-            "value_sigma": spurious_signal_sigma,
+            "value_sigma": spurious_value,
+            "maximum_sigma": maximum_spurious_signal_sigma,
             "passed": spurious_passed,
         },
         "all_passed": (

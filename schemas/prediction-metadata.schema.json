@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://particleml.local/schemas/2.0.0/prediction-metadata.schema.json",
+  "$id": "https://particleml.local/schemas/2.1.0/prediction-metadata.schema.json",
   "title": "particleML prediction metadata",
   "type": "object",
   "additionalProperties": false,
@@ -15,7 +15,7 @@
     "payload_sha256"
   ],
   "properties": {
-    "schema_version": {"const": "2.0.0"},
+    "schema_version": {"const": "2.1.0"},
     "run_record_sha256": {"$ref": "#/$defs/sha256"},
     "dataset_manifest_sha256": {"$ref": "#/$defs/sha256"},
     "model_name": {"enum": ["cut_based", "logistic", "xgboost", "mlp"]},
@@ -29,6 +29,7 @@
     "payload_fields": {
       "const": [
         "event_id",
+        "dataset_id",
         "target",
         "w_yield",
         "raw_score",
@@ -36,7 +37,16 @@
         "channel",
         "m4l",
         "model_name",
-        "seed_or_ensemble"
+        "seed_or_ensemble",
+        "is_data",
+        "process_group",
+        "sample_role",
+        "production_mode",
+        "sample_partition",
+        "variation_of",
+        "region",
+        "split",
+        "w_train"
       ]
     },
     "payload_sha256": {"$ref": "#/$defs/sha256"}

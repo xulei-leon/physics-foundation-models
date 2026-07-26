@@ -14,26 +14,54 @@ precision-measurement claim.
 ## Status
 
 - Research plan: `v1.0.0`
-- Software and contract suite: `2.0.0`
-- Python package: `0.2.0`
+- Software and contract suite: `2.1.0`
+- Python package: `0.3.0`
 - Observed signal window: **blinded**
 - Current migration status: implementation and offline fixture validation
 
-No observed fit is permitted without a valid analysis-freeze artifact whose
-hash matches the inputs and whose decorrelation gates all pass.
+No observed processing is permitted without both a valid analysis freeze and
+a separately created, self-hashed human authorization bound to that freeze.
+The implementation is verified with offline fixtures; formal physics results,
+the analysis freeze, authorization, and observed fits have not been produced.
+
+## Primary development platform
+
+The declared development and debugging target is the **NVIDIA Jetson Orin Nano
+Super Developer Kit with 8 GB memory**. Development runs in an isolated ARM64
+Docker container on the JetPack host. Python 3.10, Node.js, pnpm, compilers,
+and project dependencies are installed in the image rather than in the native
+JetPack environment. The analysis uses CPU implementations of scikit-learn,
+XGBoost, and pyhf; CUDA, PyTorch, and other deep-learning frameworks are not
+required.
+
+Use an NVMe SSD for the repository and the dedicated runtime cache and artifact
+directory. Docker image-layer placement remains managed by the existing
+JetPack Docker installation. Only the repository and the runtime directory are
+mounted into the container.
 
 ## Quick start
 
 ```bash
-python -m pip install --requirement requirements-ci.lock
-python -m pip install --no-deps --editable .
-particleml contracts validate
-pytest
-python scripts/validate_software_docs.py
+export PARTICLEML_HOST_ROOT=/mnt/nvme/particleml
+export PARTICLEML_DEV_IMAGE=particleml-jetson-dev:0.3.0
+
+test "$(id -u)" -gt 0
+test "$(id -g)" -gt 0
+
+cd "$PARTICLEML_HOST_ROOT/particleML"
+docker build \
+  --build-arg HOST_UID="$(id -u)" \
+  --build-arg HOST_GID="$(id -g)" \
+  --file docker/jetson-dev/Dockerfile \
+  --tag "$PARTICLEML_DEV_IMAGE" \
+  .
 ```
 
-The command sequence and configuration contracts are documented in
-[the analysis run guide](docs/engineering/analysis-run-guide.md). The
+The complete image build, bind-mount, resource-limit, verification, debugging,
+and container lifecycle procedures are documented in the
+[Jetson Orin Nano development guide](docs/engineering/jetson-orin-nano-development-guide.md).
+The formal command sequence and configuration contracts are documented in the
+[analysis run guide](docs/engineering/analysis-run-guide.md). The
 [research plan](docs/research/research-plan.md) separates fixed methodology
 from results that have not yet been produced.
 

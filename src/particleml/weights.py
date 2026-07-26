@@ -70,12 +70,15 @@ def attach_training_weights(
         weight = float(cast(Any, row["w_yield"]))
         if not math.isfinite(weight):
             raise ContractError("WEIGHT_NONFINITE", "w_yield is not finite")
+        if str(row.get("sample_role", "nominal")) != "nominal":
+            row["w_train"] = None
+            continue
         totals[target] += abs(weight)
     for target in (0, 1):
         if totals[target] <= 0:
             raise ContractError("WEIGHT_CLASS_EMPTY", f"class {target} has no absolute weight")
     for row in output:
-        if not bool(row["is_data"]):
+        if not bool(row["is_data"]) and str(row.get("sample_role", "nominal")) == "nominal":
             target = int(cast(Any, row["target"]))
             row["w_train"] = abs(float(cast(Any, row["w_yield"]))) * 0.5 / totals[target]
     return output

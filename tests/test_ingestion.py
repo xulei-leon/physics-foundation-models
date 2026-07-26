@@ -21,12 +21,12 @@ from particleml.physics import Selection
 
 def _write_root(path: Path) -> None:
     with uproot.recreate(path) as root:
-        root["mini"] = {
+        root["analysis"] = {
             "lep_n": np.array([4], dtype=np.int32),
             "lep_pt": ak.Array([[40_000.0, 40_000.0, 22_500.0, 22_500.0]]),
             "lep_eta": ak.Array([[0.0, 0.0, 0.0, 0.0]]),
             "lep_phi": ak.Array([[0.0, math.pi, math.pi / 2, -math.pi / 2]]),
-            "lep_E": ak.Array([[40_000.0, 40_000.0, 22_500.0, 22_500.0]]),
+            "lep_e": ak.Array([[40_000.0, 40_000.0, 22_500.0, 22_500.0]]),
             "lep_charge": ak.Array([[1, -1, 1, -1]]),
             "lep_type": ak.Array([[11, 11, 13, 13]]),
             "lep_isTightID": ak.Array([[True, True, True, True]]),
@@ -36,7 +36,7 @@ def _write_root(path: Path) -> None:
             "jet_pt": ak.Array([[0.0]]),
             "jet_eta": ak.Array([[0.0]]),
             "jet_phi": ak.Array([[0.0]]),
-            "jet_E": ak.Array([[0.0]]),
+            "jet_e": ak.Array([[0.0]]),
             "met_mpx": np.array([5_000.0]),
             "met_mpy": np.array([0.0]),
             "trigE": np.array([True]),
@@ -44,11 +44,15 @@ def _write_root(path: Path) -> None:
             "trigDE": np.array([False]),
             "trigDM": np.array([False]),
             "trigML": np.array([False]),
+            "xsec": np.array([1.0]),
+            "kfac": np.array([1.0]),
+            "filteff": np.array([1.0]),
+            "sum_of_weights": np.array([1.0]),
             "mcWeight": np.array([1.0]),
-            "scaleFactor_PILEUP": np.array([1.0]),
-            "scaleFactor_ELE": np.array([1.0]),
-            "scaleFactor_MUON": np.array([1.0]),
-            "scaleFactor_LepTRIGGER": np.array([1.0]),
+            "ScaleFactor_PILEUP": np.array([1.0]),
+            "ScaleFactor_ELE": np.array([1.0]),
+            "ScaleFactor_MUON": np.array([1.0]),
+            "ScaleFactor_LepTRIGGER": np.array([1.0]),
         }
 
 
@@ -74,7 +78,14 @@ def test_root_to_parquet_pipeline_converts_units_and_isolates_data(tmp_path: Pat
         (root_path, _source(checksum, "background", "irreducible_background")),
         (root_path, _source(checksum, "data", "data", is_data=True)),
     ]
-    rows = ingest_sources(sources, Selection(), luminosity_pb=1.0, chunk_size=1)
+    rows = ingest_sources(
+        sources,
+        Selection(),
+        luminosity_pb=1.0,
+        chunk_size=1,
+        signal_min_gev=130.0,
+        signal_max_gev=140.0,
+    )
     assert len(rows) == 3
     assert all(float(row["m4l"]) == pytest.approx(125.0) for row in rows)
     assert all(float(row["met"]) == pytest.approx(5.0) for row in rows)

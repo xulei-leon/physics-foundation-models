@@ -1,4 +1,4 @@
-# Traceability Matrix 2.0.0
+# Traceability Matrix 2.1.0
 
 | Requirement | Configuration or schema | Implementation | Test evidence |
 |---|---|---|---|
@@ -11,10 +11,16 @@
 | FEAT-001 | run-record schema | `features.py` | `test_features.py` |
 | MODEL-001 | model config | `models.py` | `test_models.py` |
 | MODEL-002 | prediction schema | `models.py` | `test_models.py` |
+| MODEL-003 | model-metadata schema | `models.py` | `test_models.py` |
+| TUNE-001 | tuning-decision schema | `tuning.py`, `cli.py` | `test_contracts.py`, `test_cli.py` |
 | DDT-001 | DDT config | `decorrelation.py` | `test_decorrelation.py` |
 | DDT-002 | analysis-freeze schema | `decorrelation.py`, `blinding.py` | `test_decorrelation.py`, `test_blinding.py` |
 | FIT-001 | fit-result schema | `inference.py` | `test_inference.py` |
+| FIT-002 | fit config | `inference.py`, `study.py` | `test_inference.py` |
 | BLIND-001 | analysis-freeze schema | `blinding.py`, `cli.py` | `test_blinding.py`, `test_cli.py` |
+| BLIND-002 | unblinding-authorization schema | `blinding.py` | `test_blinding.py` |
+| BLIND-003 | dataset manifest and freeze | `observed.py` | `test_blinding.py`, `test_ingestion.py` |
+| FREEZE-001 | analysis-freeze schema | `study.py`, `blinding.py` | `test_blinding.py` |
 | ART-001 | completion record contract | `artifacts.py` | `test_artifacts.py` |
 | CLI-001 | command specification | `cli.py` | `test_cli.py` |
 | DOC-001 | documentation contract | `validate_software_docs.py` | CI documentation job |

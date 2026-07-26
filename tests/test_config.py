@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_analysis_and_catalog_configs_load_strictly() -> None:
     analysis = load_config(ROOT / "configs" / "analysis-v1.yaml", "analysis")
     catalog = load_config(ROOT / "configs" / "catalog-sources.yaml", "catalog-sources")
-    assert analysis["schema_version"] == "2.0.0"
+    assert analysis["schema_version"] == "2.1.0"
     assert catalog["catalog_id"] == "atlas-exactly4lep-2015-2016-v1"
     assert len(config_sha256(analysis)) == 64
 

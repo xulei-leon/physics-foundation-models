@@ -22,6 +22,7 @@ ANALYSIS_SPEC: dict[str, object] = {
         "analysis_max_gev": None,
         "signal_min_gev": None,
         "signal_max_gev": None,
+        "persistence_mode": None,
     },
     "selection": {
         "lepton_count": None,
@@ -45,6 +46,16 @@ ANALYSIS_SPEC: dict[str, object] = {
     "models": {
         "formal_seeds": None,
         "tuning_seed": None,
+        "tuning": {
+            "metric": None,
+            "tie_tolerance": None,
+            "logistic_c": None,
+            "xgboost_n_estimators": None,
+            "xgboost_max_depth": None,
+            "xgboost_learning_rate": None,
+            "mlp_hidden_layer_sizes": None,
+            "mlp_alpha": None,
+        },
         "logistic": {"C": None, "max_iter": None},
         "xgboost": {
             "n_estimators": None,
@@ -54,7 +65,12 @@ ANALYSIS_SPEC: dict[str, object] = {
             "colsample_bytree": None,
             "reg_lambda": None,
         },
-        "mlp": {"hidden_layer_sizes": None, "alpha": None, "max_iter": None},
+        "mlp": {
+            "hidden_layer_sizes": None,
+            "alpha": None,
+            "max_iter": None,
+            "solver": None,
+        },
     },
     "features": {"primary": None},
     "ddt": {
@@ -68,6 +84,8 @@ ANALYSIS_SPEC: dict[str, object] = {
     },
     "fit": {
         "mass_bin_width_gev": None,
+        "template_test_fraction": None,
+        "template_weight_scale": None,
         "luminosity_uncertainty": None,
         "signal_theory_uncertainty": None,
         "irreducible_background_uncertainty": None,
@@ -78,21 +96,22 @@ ANALYSIS_SPEC: dict[str, object] = {
 CATALOG_SOURCE_SPEC: dict[str, object] = {
     "schema_version": None,
     "catalog_id": None,
+    "metadata_table_url": None,
+    "download_base_url": None,
     "records": None,
     "transport": {
         "allowed_schemes": None,
         "verify_tls": None,
         "require_sha256": None,
     },
-    "classification": {
-        "signal_name_requires": None,
-        "signal_name_requires_any": None,
-        "process_groups": {
-            "irreducible_background": None,
-            "reducible_background": None,
+    "samples": {
+        "nominal_signal": None,
+        "generator_variations": None,
+        "irreducible_background": None,
+        "reducible_background": {
+            "zjets": None,
+            "ttbar": None,
         },
-        "unknown_process_policy": None,
-        "alternative_generator_policy": None,
     },
 }
 

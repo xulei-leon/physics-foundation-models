@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://particleml.local/schemas/2.0.0/fit-result.schema.json",
+  "$id": "https://particleml.local/schemas/2.1.0/fit-result.schema.json",
   "title": "particleML profile-likelihood fit result",
   "type": "object",
   "additionalProperties": false,
@@ -17,7 +17,7 @@
     "status"
   ],
   "properties": {
-    "schema_version": {"const": "2.0.0"},
+    "schema_version": {"const": "2.1.0"},
     "fit_id": {"type": "string", "minLength": 1},
     "mode": {"enum": ["expected", "observed"]},
     "created_at": {"type": "string", "format": "date-time"},

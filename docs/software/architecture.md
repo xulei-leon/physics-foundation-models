@@ -1,4 +1,4 @@
-# Software Architecture 2.0.0
+# Software Architecture 2.1.0
 
 ## Dataflow
 
@@ -9,15 +9,17 @@ flowchart LR
   C --> D["Selection, pairing, weights, split"]
   D --> E["Canonical Parquet artifact"]
   E --> F["Safe feature matrix"]
-  F --> G["Four model paths × five seeds"]
-  G --> H["Aligned raw predictions"]
-  H --> I["DDT calibration"]
-  I --> J["Metrics and six-channel templates"]
-  J --> K["Expected pyhf fit"]
-  I --> L["Mass-sculpting gates"]
-  K --> M["Analysis freeze"]
+  F --> G["Validation-only tuning decision"]
+  G --> H["Four model paths × five seeds"]
+  H --> I["Aligned raw predictions"]
+  I --> J["Per-seed and ensemble DDT"]
+  J --> K["Scaled test templates and expected fits"]
+  J --> L["Mass-sculpting gates"]
+  K --> M["Evidence-complete analysis freeze"]
   L --> M
-  M --> N["Observed fit gate"]
+  M --> N["Independent human authorization"]
+  N --> O["Sideband reproduction"]
+  O --> P["Two frozen observed workspaces"]
 ```
 
 ## Modules
@@ -31,9 +33,12 @@ flowchart LR
 | `splits` | deterministic identity and per-dataset hash buckets |
 | `features` | frozen dimensionless features and forbidden-field enforcement |
 | `models` | four model families, five seeds, prediction alignment |
+| `tuning` | bounded validation-only candidate evaluation and decision |
 | `decorrelation` | conditional CDF, adaptive bins, sculpting gates |
 | `inference` | templates, non-positive-bin merging, pyhf workspace and fit |
-| `blinding` | freeze creation/validation and observed-fit refusal |
+| `study` | formal four-model, five-seed blinded orchestration |
+| `blinding` | freeze and independent authorization contracts |
+| `observed` | guarded two-pass data processing and observation replacement |
 | `artifacts` | canonical hashing and atomic publication |
 | `contracts` | Draft 2020-12 schema and strict YAML validation |
 | `reporting` | blinded, artifact-derived Markdown report |
@@ -42,10 +47,12 @@ flowchart LR
 ## Trust boundaries
 
 External record metadata and ROOT files are untrusted until URL policy,
-checksum, schema, units, and required branches pass. Canonical Parquet is the
+checksum, schema, units, and required branches pass. Pre-freeze real data are
+persisted only in the sidebands. Canonical Parquet is the
 training boundary. A feature matrix is untrusted until the serialized field
 list passes the forbidden-field policy. A freeze is untrusted until its
-self-hash and all referenced hashes match.
+self-hash and all referenced hashes match. Authorization is a separate trust
+boundary and must bind the exact freeze before any observed ROOT access.
 
 ## Artifact protocol
 

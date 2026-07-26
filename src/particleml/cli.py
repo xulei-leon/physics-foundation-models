@@ -15,8 +15,20 @@ import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
 from .artifacts import Artifact, IntegrityError, publish_artifact, verify_artifact
-from .blinding import authorize_observed_fit, create_freeze_document, publish_freeze
-from .catalog import download_https, validate_catalog
+from .blinding import (
+    authorize_observed_fit,
+    create_freeze_document,
+    create_unblinding_authorization,
+    load_freeze,
+    publish_freeze,
+    publish_unblinding_authorization,
+)
+from .catalog import (
+    download_https,
+    freeze_catalog,
+    publish_catalog,
+    validate_catalog,
+)
 from .config import config_sha256, load_config
 from .contracts import (
     ContractError,
@@ -32,9 +44,12 @@ from .evaluation import weighted_metrics
 from .features import PRIMARY_FEATURES
 from .inference import build_templates, build_workspace, fit_workspace, spurious_signal_sigma
 from .ingestion import SourceDescriptor, ingest_sources, publish_canonical_dataset
-from .models import MODEL_NAMES, train_seeded_predictions
+from .models import MODEL_NAMES, save_seeded_models, train_seeded_models
+from .observed import run_observed_pipeline
 from .physics import PhysicsError, selection_from_config
 from .reporting import build_blinded_report
+from .study import run_blinded_study
+from .tuning import tune_models
 
 
 def _now() -> str:
@@ -75,6 +90,13 @@ def _catalog_validate(args: argparse.Namespace) -> None:
     print(sha256_file(args.catalog))
 
 
+def _catalog_freeze(args: argparse.Namespace) -> None:
+    config = load_config(args.config, "catalog-sources")
+    catalog = freeze_catalog(config, args.cache)
+    publish_catalog(args.output, catalog)
+    print(sha256_file(args.output))
+
+
 def _dataset_build(args: argparse.Namespace) -> None:
     config = load_config(args.config, "analysis")
     catalog = _json(args.catalog)
@@ -83,7 +105,7 @@ def _dataset_build(args: argparse.Namespace) -> None:
     args.cache.mkdir(parents=True, exist_ok=True)
     for item in catalog["files"]:
         checksum = str(item["sha256"])
-        cached = args.cache / f"{checksum}.root"
+        cached = args.cache / str(item["cache_name"])
         if not cached.exists():
             download_https(str(item["url"]), cached, checksum)
         source = SourceDescriptor(
@@ -91,6 +113,14 @@ def _dataset_build(args: argparse.Namespace) -> None:
             file_checksum=checksum,
             is_data=bool(item["is_data"]),
             process_group=str(item["process_group"]),
+            sample_role=str(item["sample_role"]),
+            production_mode=(
+                None if item["production_mode"] is None else str(item["production_mode"])
+            ),
+            partition=str(item["partition"]),
+            variation_of=(
+                None if item["variation_of"] is None else int(item["variation_of"])
+            ),
             xsec_pb=None if bool(item["is_data"]) else float(item["xsec_pb"]),
             kfactor=None if bool(item["is_data"]) else float(item["kfactor"]),
             filter_efficiency=(
@@ -109,6 +139,9 @@ def _dataset_build(args: argparse.Namespace) -> None:
         float(config["luminosity_pb"]),
         tree_name=args.tree,
         chunk_size=args.chunk_size,
+        data_mode="sideband_only",
+        signal_min_gev=float(cast(Mapping[str, Any], config["blinding"])["signal_min_gev"]),
+        signal_max_gev=float(cast(Mapping[str, Any], config["blinding"])["signal_max_gev"]),
     )
     publish_canonical_dataset(
         rows,
@@ -140,7 +173,7 @@ def _training_writer(
             "FEATURE_CONFIG",
             "analysis config primary features do not match the v1 frozen contract",
         )
-    seeded, ensemble, features = train_seeded_predictions(
+    seeded, ensemble, features, fitted_models = train_seeded_models(
         frame, config, model_name, fields=configured_fields
     )
     config_hash = config_sha256(config)
@@ -153,8 +186,20 @@ def _training_writer(
         (partial / "model-input-fields.json").write_bytes(
             canonical_json_bytes({"fields": list(features.fields), "sha256": features.sha256})
         )
+        model_metadata = save_seeded_models(
+            fitted_models,
+            model_name,
+            features.fields,
+            partial / "models",
+            features.values,
+            seeded,
+        )
+        validate_document(model_metadata, "model-metadata")
+        (partial / "model-metadata.json").write_bytes(
+            canonical_json_bytes(model_metadata)
+        )
         run_record = {
-            "schema_version": "2.0.0",
+            "schema_version": "2.1.0",
             "run_id": f"{model_name}-{features.sha256[:12]}",
             "command": list(parsed_command),
             "started_at": _now(),
@@ -163,7 +208,7 @@ def _training_writer(
             "config_sha256": config_hash,
             "input_artifacts": {"dataset": dataset_artifact.sha256},
             "software": {
-                "particleml_version": "0.2.0",
+                "particleml_version": "0.3.0",
                 "python_version": sys.version.split()[0],
                 "git_commit": _git_commit(),
             },
@@ -175,7 +220,7 @@ def _training_writer(
         run_path = partial / "run-record.json"
         run_path.write_bytes(canonical_json_bytes(run_record))
         metadata = {
-            "schema_version": "2.0.0",
+            "schema_version": "2.1.0",
             "run_record_sha256": sha256_file(run_path),
             "dataset_manifest_sha256": sha256_file(
                 dataset_artifact.path / "dataset-manifest.json"
@@ -185,6 +230,7 @@ def _training_writer(
             "row_count": len(ensemble),
             "payload_fields": [
                 "event_id",
+                "dataset_id",
                 "target",
                 "w_yield",
                 "raw_score",
@@ -193,6 +239,15 @@ def _training_writer(
                 "m4l",
                 "model_name",
                 "seed_or_ensemble",
+                "is_data",
+                "process_group",
+                "sample_role",
+                "production_mode",
+                "sample_partition",
+                "variation_of",
+                "region",
+                "split",
+                "w_train",
             ],
             "payload_sha256": sha256_file(ensemble_path),
         }
@@ -204,6 +259,7 @@ def _training_writer(
         validate_document(
             _json(partial / "prediction-metadata.json"), "prediction-metadata"
         )
+        validate_document(_json(partial / "model-metadata.json"), "model-metadata")
         stored = pd.read_parquet(partial / "predictions-ensemble.parquet")
         if stored["event_id"].duplicated().any() or len(stored) != len(frame):
             raise ContractError("PREDICTION_ALIGNMENT", "stored predictions are misaligned")
@@ -214,7 +270,7 @@ def _training_writer(
         validator,
         {"dataset": dataset_artifact.sha256},
         config_hash,
-        "particleml-0.2.0",
+        "particleml-0.3.0",
     )
 
 
@@ -229,6 +285,80 @@ def _run_train(args: argparse.Namespace) -> None:
         args.model,
         dataset_artifact,
         ["particleml", "run", "train", "--model", args.model],
+    )
+
+
+def _study_tune(args: argparse.Namespace) -> None:
+    config = load_config(args.config, "analysis")
+    dataset_artifact = verify_artifact(args.dataset)
+    frame, _ = load_dataset(args.dataset)
+    decision = tune_models(frame, config, dataset_artifact.sha256)
+    validate_document(decision, "tuning-decision")
+    config_hash = config_sha256(config)
+
+    def writer(partial: Path) -> None:
+        (partial / "tuning-decision.json").write_bytes(canonical_json_bytes(decision))
+
+    def validator(partial: Path) -> None:
+        validate_document(
+            _json(partial / "tuning-decision.json"),
+            "tuning-decision",
+        )
+
+    publish_artifact(
+        args.output,
+        writer,
+        validator,
+        {"dataset": dataset_artifact.sha256},
+        config_hash,
+        "particleml-0.3.0",
+    )
+
+
+def _study_run(args: argparse.Namespace) -> None:
+    config = load_config(args.config, "analysis")
+    dataset_artifact = verify_artifact(args.dataset)
+    tuning_artifact = verify_artifact(args.tuning)
+    catalog = _json(args.catalog)
+    validate_catalog(catalog)
+    frame, _ = load_dataset(args.dataset)
+    tuning_document = _json(args.tuning / "tuning-decision.json")
+    validate_document(tuning_document, "tuning-decision")
+    config_hash = config_sha256(config)
+    catalog_hash = sha256_file(args.catalog)
+
+    def writer(partial: Path) -> None:
+        run_blinded_study(
+            frame,
+            config,
+            dataset_artifact.sha256,
+            tuning_document,
+            tuning_artifact.sha256,
+            catalog_hash,
+            partial,
+            _git_commit(),
+        )
+
+    def validator(partial: Path) -> None:
+        validate_document(_json(partial / "study-result.json"), "study-result")
+        gates = _json(partial / "gate-sets.json")
+        if not gates:
+            raise ContractError("STUDY_GATES", "formal gate sets are missing")
+        freeze_inputs = _json(partial / "freeze-inputs.json")
+        if freeze_inputs["artifacts"]["config"] != config_hash:
+            raise ContractError("STUDY_CONFIG_HASH", "freeze inputs have wrong config")
+
+    publish_artifact(
+        args.output,
+        writer,
+        validator,
+        {
+            "dataset": dataset_artifact.sha256,
+            "tuning": tuning_artifact.sha256,
+            "catalog": catalog_hash,
+        },
+        config_hash,
+        "particleml-0.3.0",
     )
 
 
@@ -277,7 +407,7 @@ def _decorrelate(args: argparse.Namespace) -> None:
         validator,
         {"predictions": prediction_artifact.sha256},
         config_hash,
-        "particleml-0.2.0",
+        "particleml-0.3.0",
     )
 
 
@@ -285,7 +415,12 @@ def _evaluate(args: argparse.Namespace) -> None:
     config = load_config(args.config, "analysis")
     prediction_artifact = verify_artifact(args.predictions)
     frame = pd.read_parquet(args.predictions / "predictions-ddt.parquet")
-    test = frame[(~frame["is_data"].astype(bool)) & (frame["split"] == "test")]
+    nominal = frame["sample_role"].astype(str) == "nominal"
+    test = frame[
+        (~frame["is_data"].astype(bool))
+        & nominal
+        & (frame["split"] == "test")
+    ]
     metrics = weighted_metrics(
         np.asarray(test["target"], dtype=np.int64),
         np.asarray(test["raw_score"], dtype=np.float64),
@@ -293,15 +428,40 @@ def _evaluate(args: argparse.Namespace) -> None:
     )
     background = frame[
         (~frame["is_data"].astype(bool))
+        & nominal
         & (frame["target"] == 0)
         & (frame["split"] == "test")
     ]
     data = frame[frame["is_data"].astype(bool)]
+    blinding = cast(Mapping[str, Any], config["blinding"])
     sideband = data[
-        ((data["m4l"] >= 105.0) & (data["m4l"] < 120.0))
-        | ((data["m4l"] >= 130.0) & (data["m4l"] < 160.0))
+        (
+            (data["m4l"] >= float(blinding["analysis_min_gev"]))
+            & (data["m4l"] < float(blinding["signal_min_gev"]))
+        )
+        | (
+            (data["m4l"] >= float(blinding["signal_max_gev"]))
+            & (data["m4l"] < float(blinding["analysis_max_gev"]))
+        )
     ]
-    gates = evaluate_decorrelation_gates(background, sideband, args.spurious_signal_sigma)
+    ddt = cast(Mapping[str, Any], config["ddt"])
+    calibration = _json(args.predictions / "ddt-calibration.json")
+    bins = cast(Sequence[Mapping[str, object]], calibration["bins"])
+    gates = evaluate_decorrelation_gates(
+        background,
+        sideband,
+        args.spurious_signal_sigma,
+        maximum_absolute_rho=float(ddt["max_abs_spearman"]),
+        threshold=float(ddt["threshold"]),
+        acceptance_minimum=float(ddt["sideband_acceptance_min"]),
+        acceptance_maximum=float(ddt["sideband_acceptance_max"]),
+        maximum_spurious_signal_sigma=float(ddt["max_spurious_signal_sigma"]),
+        bin_ranges=bins,
+        analysis_min=float(blinding["analysis_min_gev"]),
+        analysis_max=float(blinding["analysis_max_gev"]),
+        signal_min=float(blinding["signal_min_gev"]),
+        signal_max=float(blinding["signal_max_gev"]),
+    )
     config_hash = config_sha256(config)
 
     def writer(partial: Path) -> None:
@@ -317,7 +477,7 @@ def _evaluate(args: argparse.Namespace) -> None:
         validator,
         {"predictions": prediction_artifact.sha256},
         config_hash,
-        "particleml-0.2.0",
+        "particleml-0.3.0",
     )
 
 
@@ -325,8 +485,25 @@ def _fit_expected(args: argparse.Namespace) -> None:
     config = load_config(args.config, "analysis")
     prediction_artifact = verify_artifact(args.predictions)
     frame = pd.read_parquet(args.predictions / "predictions-ddt.parquet")
-    templates = build_templates(frame)
+    blinding = cast(Mapping[str, Any], config["blinding"])
+    ddt = cast(Mapping[str, Any], config["ddt"])
     fit_config = cast(Mapping[str, Any], config["fit"])
+    test_fraction = float(fit_config["template_test_fraction"])
+    weight_scale = float(fit_config["template_weight_scale"])
+    if not np.isclose(test_fraction * weight_scale, 1.0, rtol=0.0, atol=1e-12):
+        raise ContractError(
+            "TEMPLATE_SCALING",
+            "template_weight_scale must be the reciprocal of template_test_fraction",
+        )
+    templates = build_templates(
+        frame,
+        mass_min=float(blinding["analysis_min_gev"]),
+        mass_max=float(blinding["analysis_max_gev"]),
+        bin_width=float(fit_config["mass_bin_width_gev"]),
+        ddt_threshold=float(ddt["threshold"]),
+        simulation_split="test",
+        weight_scale=weight_scale,
+    )
     workspace = build_workspace(
         templates,
         float(fit_config["luminosity_uncertainty"]),
@@ -336,7 +513,11 @@ def _fit_expected(args: argparse.Namespace) -> None:
     )
     result = fit_workspace(workspace, "expected")
     spurious = spurious_signal_sigma(workspace)
-    summary = {"spurious_signal_sigma": spurious, "passed": spurious < 0.2}
+    summary = {
+        "spurious_signal_sigma": spurious,
+        "maximum_sigma": float(ddt["max_spurious_signal_sigma"]),
+        "passed": spurious < float(ddt["max_spurious_signal_sigma"]),
+    }
     config_hash = config_sha256(config)
 
     def writer(partial: Path) -> None:
@@ -355,58 +536,87 @@ def _fit_expected(args: argparse.Namespace) -> None:
         validator,
         {"predictions": prediction_artifact.sha256},
         config_hash,
-        "particleml-0.2.0",
+        "particleml-0.3.0",
     )
 
 
 def _analysis_freeze(args: argparse.Namespace) -> None:
     config = load_config(args.config, "analysis")
     root = args.inputs
-    catalog_path = root / "catalog.json"
-    dataset = verify_artifact(root / "dataset")
-    predictions = verify_artifact(root / "ddt")
-    fit = verify_artifact(root / "expected-fit")
-    evaluation = verify_artifact(root / "evaluation")
-    gates = _json(evaluation.path / "gates.json")
-    fit_summary = _json(fit.path / "fit-summary.json")
-    spurious = float(fit_summary["spurious_signal_sigma"])
-    gates["spurious_signal"] = {"value_sigma": spurious, "passed": spurious < 0.2}
-    gates["all_passed"] = all(
-        cast(Mapping[str, Any], gates[name]).get("passed") is True
-        for name in (
-            "mc_spearman",
-            "data_sideband_spearman",
-            "sideband_acceptance",
-            "spurious_signal",
-        )
-    )
-    hashes = {
-        "config_sha256": config_sha256(config),
-        "catalog_sha256": sha256_file(catalog_path),
-        "dataset_manifest_sha256": dataset.sha256,
-        "prediction_sha256": predictions.sha256,
-        "template_sha256": fit.sha256,
-    }
-    document = create_freeze_document(args.freeze_id, hashes, gates)
+    study = verify_artifact(root / "study")
+    freeze_inputs = _json(study.path / "freeze-inputs.json")
+    artifacts = cast(Mapping[str, str], freeze_inputs["artifacts"])
+    if artifacts["config"] != config_sha256(config):
+        raise ContractError("FREEZE_UPSTREAM_HASH", "config does not match study")
+    if artifacts["study_result"] != sha256_file(study.path / "study-result.json"):
+        raise ContractError("FREEZE_UPSTREAM_HASH", "study result does not match")
+    gate_sets = _json(study.path / "gate-sets.json")
+    document = create_freeze_document(args.freeze_id, artifacts, gate_sets)
     publish_freeze(args.output, document)
 
 
-def _fit_observed(args: argparse.Namespace) -> None:
+def _analysis_authorize(args: argparse.Namespace) -> None:
+    freeze = load_freeze(args.freeze)
+    document = create_unblinding_authorization(
+        args.authorization_id,
+        str(freeze["freeze_sha256"]),
+        args.approver,
+    )
+    publish_unblinding_authorization(args.output, document)
+
+
+def _analysis_observed(args: argparse.Namespace) -> None:
     config = load_config(args.config, "analysis")
-    freeze = authorize_observed_fit(args.freeze, args.unblind)
-    if freeze["config_sha256"] != config_sha256(config):
-        raise ContractError("FREEZE_UPSTREAM_HASH", "config_sha256 does not match")
-    if args.workspace is None or args.output is None:
-        raise ContractError(
-            "FIT_OBSERVED_INPUT",
-            "authorized observed fit additionally requires --workspace and --output",
-        )
-    template_artifact = verify_artifact(args.workspace.parent)
-    if template_artifact.sha256 != freeze["template_sha256"]:
-        raise ContractError("FREEZE_UPSTREAM_HASH", "template_sha256 does not match")
-    workspace = _json(args.workspace)
-    result = fit_workspace(workspace, "observed", str(freeze["freeze_sha256"]))
-    _write_json(args.output, result)
+    freeze, authorization = authorize_observed_fit(
+        args.freeze,
+        args.authorization,
+        args.unblind,
+        "xgboost-ensemble",
+    )
+    artifacts = cast(Mapping[str, str], freeze["artifacts"])
+    if artifacts["config"] != config_sha256(config):
+        raise ContractError("FREEZE_UPSTREAM_HASH", "config does not match freeze")
+    catalog = _json(args.catalog)
+    validate_catalog(catalog)
+    catalog_hash = sha256_file(args.catalog)
+    if catalog_hash != artifacts["catalog"]:
+        raise ContractError("FREEZE_UPSTREAM_HASH", "catalog does not match freeze")
+    dataset_artifact = verify_artifact(args.dataset)
+    if dataset_artifact.sha256 != artifacts["dataset"]:
+        raise ContractError("FREEZE_UPSTREAM_HASH", "dataset does not match freeze")
+    study_artifact = verify_artifact(args.study)
+    freeze_inputs = _json(study_artifact.path / "freeze-inputs.json")
+    if freeze_inputs["artifacts"] != dict(artifacts):
+        raise ContractError("FREEZE_UPSTREAM_HASH", "study components do not match freeze")
+    frozen_dataset, _ = load_dataset(args.dataset)
+    run_observed_pipeline(
+        catalog=catalog,
+        cache=args.cache,
+        frozen_dataset=frozen_dataset,
+        dataset_artifact=dataset_artifact,
+        study_artifact=study_artifact,
+        config=config,
+        freeze_sha256=str(freeze["freeze_sha256"]),
+        authorization_sha256=str(authorization["authorization_sha256"]),
+        catalog_sha256=catalog_hash,
+        output=args.output,
+        tree_name=args.tree,
+        chunk_size=args.chunk_size,
+    )
+
+
+def _fit_observed(args: argparse.Namespace) -> None:
+    load_config(args.config, "analysis")
+    authorize_observed_fit(
+        args.freeze,
+        args.authorization,
+        args.unblind,
+        args.workspace_name,
+    )
+    raise ContractError(
+        "FIT_OBSERVED_FLOW",
+        "use 'particleml analysis observed' for the guarded two-pass workflow",
+    )
 
 
 def _report_build(args: argparse.Namespace) -> None:
@@ -450,6 +660,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     catalog_validate.add_argument("--catalog", type=Path, required=True)
     catalog_validate.set_defaults(handler=_catalog_validate)
+    catalog_freeze = catalog.add_parser("freeze")
+    catalog_freeze.add_argument(
+        "--config", type=Path, default=Path("configs/catalog-sources.yaml")
+    )
+    catalog_freeze.add_argument("--cache", type=Path, required=True)
+    catalog_freeze.add_argument("--output", type=Path, required=True)
+    catalog_freeze.set_defaults(handler=_catalog_freeze)
 
     dataset = top.add_parser("dataset").add_subparsers(dest="action", required=True)
     dataset_build = dataset.add_parser("build")
@@ -457,7 +674,8 @@ def build_parser() -> argparse.ArgumentParser:
     dataset_build.add_argument("--catalog", type=Path, required=True)
     dataset_build.add_argument("--cache", type=Path, required=True)
     dataset_build.add_argument("--output", type=Path, required=True)
-    dataset_build.add_argument("--tree", default="mini")
+    dataset_build.add_argument("--tree", default="analysis")
+    dataset_build.add_argument("--mode", choices=("blinded",), default="blinded")
     dataset_build.add_argument("--chunk-size", type=int, default=50_000)
     dataset_build.set_defaults(handler=_dataset_build)
 
@@ -474,6 +692,20 @@ def build_parser() -> argparse.ArgumentParser:
     run_train.add_argument("--output", type=Path, required=True)
     run_train.add_argument("--model", choices=MODEL_NAMES, default="xgboost")
     run_train.set_defaults(handler=_run_train)
+
+    study = top.add_parser("study").add_subparsers(dest="action", required=True)
+    study_tune = study.add_parser("tune")
+    _add_config(study_tune)
+    study_tune.add_argument("--dataset", type=Path, required=True)
+    study_tune.add_argument("--output", type=Path, required=True)
+    study_tune.set_defaults(handler=_study_tune)
+    study_run = study.add_parser("run")
+    _add_config(study_run)
+    study_run.add_argument("--catalog", type=Path, required=True)
+    study_run.add_argument("--dataset", type=Path, required=True)
+    study_run.add_argument("--tuning", type=Path, required=True)
+    study_run.add_argument("--output", type=Path, required=True)
+    study_run.set_defaults(handler=_study_run)
 
     decorrelate = top.add_parser("decorrelate")
     _add_config(decorrelate)
@@ -495,6 +727,28 @@ def build_parser() -> argparse.ArgumentParser:
     freeze.add_argument("--output", type=Path, required=True)
     freeze.add_argument("--freeze-id", default="atlas-h4l-v1-freeze")
     freeze.set_defaults(handler=_analysis_freeze)
+    authorize = analysis.add_parser("authorize")
+    authorize.add_argument("--freeze", type=Path, required=True)
+    authorize.add_argument("--approver", required=True)
+    authorize.add_argument("--output", type=Path, required=True)
+    authorize.add_argument(
+        "--authorization-id",
+        default="atlas-h4l-v1-unblinding-authorization",
+    )
+    authorize.set_defaults(handler=_analysis_authorize)
+    analysis_observed = analysis.add_parser("observed")
+    _add_config(analysis_observed)
+    analysis_observed.add_argument("--freeze", type=Path, required=True)
+    analysis_observed.add_argument("--authorization", type=Path, required=True)
+    analysis_observed.add_argument("--catalog", type=Path, required=True)
+    analysis_observed.add_argument("--cache", type=Path, required=True)
+    analysis_observed.add_argument("--dataset", type=Path, required=True)
+    analysis_observed.add_argument("--study", type=Path, required=True)
+    analysis_observed.add_argument("--output", type=Path, required=True)
+    analysis_observed.add_argument("--tree", default="analysis")
+    analysis_observed.add_argument("--chunk-size", type=int, default=50_000)
+    analysis_observed.add_argument("--unblind", action="store_true")
+    analysis_observed.set_defaults(handler=_analysis_observed)
 
     fit = top.add_parser("fit").add_subparsers(dest="action", required=True)
     expected = fit.add_parser("expected")
@@ -505,6 +759,8 @@ def build_parser() -> argparse.ArgumentParser:
     observed = fit.add_parser("observed")
     _add_config(observed)
     observed.add_argument("--freeze", type=Path)
+    observed.add_argument("--authorization", type=Path)
+    observed.add_argument("--workspace-name", choices=("xgboost-ensemble", "cut_based-ensemble"))
     observed.add_argument("--unblind", action="store_true")
     observed.add_argument("--workspace", type=Path)
     observed.add_argument("--output", type=Path)

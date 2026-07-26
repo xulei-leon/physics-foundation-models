@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any, Protocol, cast
 
+import joblib  # type: ignore[import-untyped]
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
+import sklearn  # type: ignore[import-untyped]
+import xgboost
 from sklearn.linear_model import LogisticRegression  # type: ignore[import-untyped]
 from sklearn.neural_network import MLPClassifier  # type: ignore[import-untyped]
 from sklearn.pipeline import Pipeline  # type: ignore[import-untyped]
 from sklearn.preprocessing import StandardScaler  # type: ignore[import-untyped]
 from xgboost import XGBClassifier
 
-from .contracts import ContractError
+from .contracts import ContractError, canonical_json_bytes, sha256_file
 from .features import PRIMARY_FEATURES, FeatureMatrix, build_feature_matrix
 
 FORMAL_SEEDS = (17, 42, 314, 2026, 2718)
@@ -97,6 +102,9 @@ def build_model(
         )
     if name == "mlp":
         params = _mapping(models["mlp"], "models.mlp")
+        solver = str(params["solver"])
+        if solver not in {"lbfgs", "adam"}:
+            raise ContractError("MODEL_CONFIG", f"unsupported MLP solver: {solver}")
         hidden = tuple(
             int(cast(Any, value))
             for value in cast(Sequence[object], params["hidden_layer_sizes"])
@@ -113,6 +121,7 @@ def build_model(
                             alpha=float(params["alpha"]),
                             max_iter=int(params["max_iter"]),
                             random_state=seed,
+                            solver=solver,
                             early_stopping=False,
                         ),
                     ),
@@ -149,19 +158,28 @@ def _fit_with_weights(
         model.fit(values, target, sample_weight=weights)
 
 
-def train_seeded_predictions(
+def train_seeded_models(
     frame: pd.DataFrame,
     config: Mapping[str, Any],
     model_name: str,
     seeds: Sequence[int] = FORMAL_SEEDS,
     fields: tuple[str, ...] = PRIMARY_FEATURES,
-) -> tuple[dict[int, pd.DataFrame], pd.DataFrame, FeatureMatrix]:
+) -> tuple[dict[int, pd.DataFrame], pd.DataFrame, FeatureMatrix, dict[int, Classifier]]:
     """Train fixed seeds on simulation train events and predict every row."""
 
     if tuple(seeds) != FORMAL_SEEDS:
         raise ContractError("MODEL_SEEDS", f"formal seeds must be {FORMAL_SEEDS}")
     features = build_feature_matrix(frame, fields)
-    train_mask = (~frame["is_data"].astype(bool)) & (frame["split"] == "train")
+    nominal = (
+        frame["sample_role"].astype(str) == "nominal"
+        if "sample_role" in frame
+        else pd.Series(True, index=frame.index)
+    )
+    train_mask = (
+        (~frame["is_data"].astype(bool))
+        & nominal
+        & (frame["split"] == "train")
+    )
     if not train_mask.any():
         raise ContractError("MODEL_TRAIN_EMPTY", "no simulation training events")
     missing_target = frame.loc[train_mask, "target"].isna().any()
@@ -173,13 +191,16 @@ def train_seeded_predictions(
     if set(target.tolist()) != {0, 1}:
         raise ContractError("MODEL_TRAIN_CLASS", "both signal and background are required")
     predictions: dict[int, pd.DataFrame] = {}
+    fitted_models: dict[int, Classifier] = {}
     for seed in seeds:
         model = build_model(model_name, seed, config, fields)
         _fit_with_weights(model, features.values[train_mask.to_numpy()], target, weights)
+        fitted_models[seed] = model
         score = np.asarray(model.predict_proba(features.values)[:, 1], dtype=np.float64)
         predictions[seed] = pd.DataFrame(
             {
                 "event_id": frame["event_id"].astype(str).to_numpy(),
+                "dataset_id": frame["dataset_id"].astype(str).to_numpy(),
                 "target": frame["target"].to_numpy(),
                 "w_yield": frame["w_yield"].astype(float).to_numpy(),
                 "raw_score": score,
@@ -190,12 +211,145 @@ def train_seeded_predictions(
                 "seed_or_ensemble": seed,
                 "is_data": frame["is_data"].astype(bool).to_numpy(),
                 "process_group": frame["process_group"].astype(str).to_numpy(),
+                "sample_role": (
+                    frame["sample_role"].astype(str).to_numpy()
+                    if "sample_role" in frame
+                    else np.full(len(frame), "nominal", dtype=object)
+                ),
+                "production_mode": (
+                    frame["production_mode"].to_numpy()
+                    if "production_mode" in frame
+                    else np.full(len(frame), None, dtype=object)
+                ),
+                "sample_partition": (
+                    frame["sample_partition"].astype(str).to_numpy()
+                    if "sample_partition" in frame
+                    else np.full(len(frame), "inclusive", dtype=object)
+                ),
+                "variation_of": (
+                    frame["variation_of"].to_numpy()
+                    if "variation_of" in frame
+                    else np.full(len(frame), None, dtype=object)
+                ),
+                "region": (
+                    frame["region"].astype(str).to_numpy()
+                    if "region" in frame
+                    else np.where(frame["is_data"].astype(bool), "sideband", "simulation")
+                ),
                 "split": frame["split"].astype(str).to_numpy(),
                 "w_train": frame["w_train"].to_numpy(),
             }
         )
     ensemble = ensemble_predictions(predictions)
+    return predictions, ensemble, features, fitted_models
+
+
+def train_seeded_predictions(
+    frame: pd.DataFrame,
+    config: Mapping[str, Any],
+    model_name: str,
+    seeds: Sequence[int] = FORMAL_SEEDS,
+    fields: tuple[str, ...] = PRIMARY_FEATURES,
+) -> tuple[dict[int, pd.DataFrame], pd.DataFrame, FeatureMatrix]:
+    """Train fixed seeds and return predictions while preserving the v2 API."""
+
+    predictions, ensemble, features, _ = train_seeded_models(
+        frame,
+        config,
+        model_name,
+        seeds=seeds,
+        fields=fields,
+    )
     return predictions, ensemble, features
+
+
+def save_seeded_models(
+    models: Mapping[int, Classifier],
+    model_name: str,
+    fields: Sequence[str],
+    directory: Path,
+    feature_values: np.ndarray[Any, np.dtype[np.float64]],
+    expected_predictions: Mapping[int, pd.DataFrame],
+) -> dict[str, object]:
+    """Persist fitted models and verify reloaded predictions before publication."""
+
+    if tuple(sorted(models)) != tuple(sorted(FORMAL_SEEDS)):
+        raise ContractError("MODEL_SEEDS", "all formal fitted models are required")
+    directory.mkdir(parents=True, exist_ok=False)
+    records: list[dict[str, object]] = []
+    for seed in FORMAL_SEEDS:
+        model = models[seed]
+        if model_name == "cut_based":
+            path = directory / f"model-seed-{seed}.json"
+            path.write_bytes(
+                canonical_json_bytes(
+                    {
+                        "model_name": model_name,
+                        "seed": seed,
+                        "fields": list(fields),
+                    }
+                )
+            )
+            format_name = "particleml-cut-v1"
+        elif model_name == "xgboost":
+            path = directory / f"model-seed-{seed}.json"
+            cast(XGBClassifier, model).save_model(path)
+            format_name = "xgboost-json"
+        else:
+            path = directory / f"model-seed-{seed}.joblib"
+            joblib.dump(model, path, compress=3)
+            format_name = "joblib"
+        reloaded = load_model(path, model_name, fields)
+        actual = np.asarray(reloaded.predict_proba(feature_values)[:, 1], dtype=np.float64)
+        expected = np.asarray(expected_predictions[seed]["raw_score"], dtype=np.float64)
+        if not np.allclose(actual, expected, rtol=0.0, atol=1e-12):
+            raise ContractError(
+                "MODEL_RELOAD",
+                f"reloaded {model_name} seed {seed} changed predictions",
+            )
+        records.append(
+            {
+                "seed": seed,
+                "path": path.name,
+                "format": format_name,
+                "sha256": sha256_file(path),
+            }
+        )
+    return {
+        "schema_version": "2.1.0",
+        "model_name": model_name,
+        "fields": list(fields),
+        "seeds": list(FORMAL_SEEDS),
+        "libraries": {
+            "scikit_learn": sklearn.__version__,
+            "xgboost": xgboost.__version__,
+        },
+        "files": records,
+    }
+
+
+def load_model(path: Path, model_name: str, fields: Sequence[str]) -> Classifier:
+    """Load one frozen model from its declared family-specific format."""
+
+    if model_name == "cut_based":
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContractError("MODEL_LOAD", f"cannot load {path}: {exc}") from exc
+        if document.get("model_name") != "cut_based" or document.get("fields") != list(fields):
+            raise ContractError("MODEL_LOAD", "cut-based model metadata do not match")
+        return CutBasedClassifier(fields)
+    if model_name == "xgboost":
+        model = XGBClassifier()
+        model.load_model(path)
+        return cast(Classifier, model)
+    try:
+        loaded = joblib.load(path)
+    except (OSError, ValueError, TypeError) as exc:
+        raise ContractError("MODEL_LOAD", f"cannot load {path}: {exc}") from exc
+    if not hasattr(loaded, "predict_proba"):
+        raise ContractError("MODEL_LOAD", f"{path} is not a classifier")
+    return cast(Classifier, loaded)
 
 
 def ensemble_predictions(predictions: Mapping[int, pd.DataFrame]) -> pd.DataFrame:
@@ -209,6 +363,7 @@ def ensemble_predictions(predictions: Mapping[int, pd.DataFrame]) -> pd.DataFram
     event_order = reference["event_id"].astype(str).tolist()
     score_columns: list[np.ndarray[Any, np.dtype[np.float64]]] = []
     metadata = [
+        "dataset_id",
         "target",
         "w_yield",
         "channel",
@@ -216,6 +371,11 @@ def ensemble_predictions(predictions: Mapping[int, pd.DataFrame]) -> pd.DataFram
         "model_name",
         "is_data",
         "process_group",
+        "sample_role",
+        "production_mode",
+        "sample_partition",
+        "variation_of",
+        "region",
         "split",
         "w_train",
     ]

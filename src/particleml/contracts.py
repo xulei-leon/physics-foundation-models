@@ -11,14 +11,18 @@ from typing import Any
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError, ValidationError
 
-SCHEMA_VERSION = "2.0.0"
+SCHEMA_VERSION = "2.1.0"
 SCHEMA_NAMES = (
     "dataset-catalog",
     "dataset-manifest",
     "split-manifest",
     "run-record",
     "prediction-metadata",
+    "model-metadata",
+    "tuning-decision",
+    "study-result",
     "analysis-freeze",
+    "unblinding-authorization",
     "fit-result",
 )
 
@@ -72,7 +76,14 @@ def canonical_json_bytes(document: object) -> bytes:
     """Serialize a JSON-compatible object deterministically."""
 
     return (
-        json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+        json.dumps(
+            document,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        + "\n"
     ).encode("utf-8")
 
 

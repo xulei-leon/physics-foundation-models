@@ -24,6 +24,7 @@ def merge_nonpositive_bins(
     edges: Sequence[float],
     yields: Mapping[str, Sequence[float]],
     variances: Mapping[str, Sequence[float]],
+    allow_empty_samples: bool = False,
 ) -> tuple[list[float], dict[str, list[float]], dict[str, list[float]]]:
     """Merge a failing bin with its right neighbor, or left at the boundary."""
 
@@ -38,12 +39,25 @@ def merge_nonpositive_bins(
         raise ContractError("TEMPLATE_LENGTH", "template arrays and edges are misaligned")
     if set(merged_yields) != set(merged_variances):
         raise ContractError("TEMPLATE_SAMPLES", "yield and variance samples differ")
+    totals = {name: float(np.sum(values)) for name, values in merged_yields.items()}
+    if any(total < 0.0 for total in totals.values()):
+        raise ContractError("TEMPLATE_NONPOSITIVE", "a sample has a negative total yield")
+    active_samples = {
+        name
+        for name, total in totals.items()
+        if total > 0.0 or not allow_empty_samples
+    }
+    if not active_samples:
+        raise ContractError("TEMPLATE_NONPOSITIVE", "all samples have zero total yield")
     while True:
         failing = next(
             (
                 index
                 for index in range(len(merged_edges) - 1)
-                if any(values[index] <= 0 for values in merged_yields.values())
+                if any(
+                    merged_yields[name][index] <= 0
+                    for name in active_samples
+                )
             ),
             None,
         )
@@ -80,6 +94,10 @@ def build_templates(
     mass_max: float = 160.0,
     bin_width: float = 1.0,
     observed: bool = False,
+    ddt_threshold: float = 0.8,
+    simulation_split: str | None = "test",
+    weight_scale: float = 1.0,
+    generator_replacement: int | None = None,
 ) -> dict[str, dict[str, object]]:
     """Build process-separated templates for three states and two DDT categories."""
 
@@ -88,14 +106,57 @@ def build_templates(
         "ddt_score",
         "channel",
         "process_group",
+        "sample_role",
         "is_data",
         "w_yield",
     }
     missing = sorted(required - set(frame.columns))
     if missing:
         raise ContractError("TEMPLATE_COLUMNS", f"missing columns: {', '.join(missing)}")
+    if not np.isfinite(weight_scale) or weight_scale <= 0.0:
+        raise ContractError("TEMPLATE_WEIGHT_SCALE", "weight_scale must be positive")
     working = frame.copy()
-    working["category"] = np.where(working["ddt_score"].astype(float) < 0.8, "low", "high")
+    is_simulation = ~working["is_data"].astype(bool)
+    nominal = working["sample_role"].astype(str) == "nominal"
+    selected_simulation = is_simulation & nominal
+    if simulation_split is not None:
+        if "split" not in working:
+            raise ContractError("TEMPLATE_COLUMNS", "split is required for split selection")
+        selected_simulation &= working["split"].astype(str) == simulation_split
+    if generator_replacement is not None:
+        if "variation_of" not in working or "dataset_id" not in working:
+            raise ContractError(
+                "TEMPLATE_VARIATION_COLUMNS",
+                "dataset_id and variation_of are required for generator replacement",
+            )
+        replaced_nominal = (
+            nominal
+            & (working["process_group"].astype(str) == "signal")
+            & (working["dataset_id"].astype(str) == f"mc-{generator_replacement}")
+        )
+        replacement = (
+            is_simulation
+            & (working["sample_role"].astype(str) == "generator_variation")
+            & (working["variation_of"].fillna(-1).astype(int) == generator_replacement)
+        )
+        if simulation_split is not None:
+            replacement &= working["split"].astype(str) == simulation_split
+        if not replacement.any():
+            raise ContractError(
+                "TEMPLATE_VARIATION_EMPTY",
+                f"no generator variation replaces DSID {generator_replacement}",
+            )
+        selected_simulation = (selected_simulation & ~replaced_nominal) | replacement
+    working = working.loc[
+        selected_simulation | working["is_data"].astype(bool)
+    ].copy()
+    simulation_rows = ~working["is_data"].astype(bool)
+    working.loc[simulation_rows, "w_yield"] = (
+        working.loc[simulation_rows, "w_yield"].astype(float) * weight_scale
+    )
+    working["category"] = np.where(
+        working["ddt_score"].astype(float) < ddt_threshold, "low", "high"
+    )
     base_edges = np.arange(mass_min, mass_max + bin_width / 2.0, bin_width)
     templates: dict[str, dict[str, object]] = {}
     for state in FINAL_STATES:
@@ -110,12 +171,19 @@ def build_templates(
             for sample in SAMPLES:
                 sample_frame = simulation[simulation["process_group"] == sample]
                 if sample_frame.empty:
-                    raise ContractError(
-                        "TEMPLATE_SAMPLE_EMPTY", f"{channel_name} has no {sample} events"
+                    zeros = [0.0] * (len(base_edges) - 1)
+                    yields[sample] = zeros.copy()
+                    variances[sample] = zeros.copy()
+                else:
+                    yields[sample], variances[sample] = _histogram(
+                        sample_frame,
+                        base_edges,
                     )
-                yields[sample], variances[sample] = _histogram(sample_frame, base_edges)
             edges, yields, variances = merge_nonpositive_bins(
-                base_edges.tolist(), yields, variances
+                base_edges.tolist(),
+                yields,
+                variances,
+                allow_empty_samples=True,
             )
             data = selected[selected["is_data"].astype(bool)]
             if observed:
@@ -273,7 +341,7 @@ def fit_workspace(
     )
     significance = float(norm.isf(max(p_value, np.finfo(float).tiny)))
     result: dict[str, object] = {
-        "schema_version": "2.0.0",
+        "schema_version": "2.1.0",
         "fit_id": f"{mode}-{sha256_document(workspace_spec)[:12]}",
         "mode": mode,
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),

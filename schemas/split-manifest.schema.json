@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://particleml.local/schemas/2.0.0/split-manifest.schema.json",
+  "$id": "https://particleml.local/schemas/2.1.0/split-manifest.schema.json",
   "title": "particleML deterministic event split manifest",
   "type": "object",
   "additionalProperties": false,
@@ -13,7 +13,7 @@
     "counts_by_dataset"
   ],
   "properties": {
-    "schema_version": {"const": "2.0.0"},
+    "schema_version": {"const": "2.1.0"},
     "algorithm": {"const": "sha256-bucket-v1"},
     "identity_fields": {
       "const": ["dataset_id", "file_checksum", "entry_index"]

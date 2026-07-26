@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://particleml.local/schemas/2.0.0/analysis-freeze.schema.json",
+  "$id": "https://particleml.local/schemas/2.1.0/analysis-freeze.schema.json",
   "title": "particleML analysis freeze",
   "type": "object",
   "additionalProperties": false,
@@ -8,44 +8,122 @@
     "schema_version",
     "freeze_id",
     "created_at",
-    "config_sha256",
-    "catalog_sha256",
-    "dataset_manifest_sha256",
-    "prediction_sha256",
-    "template_sha256",
-    "gates",
-    "observed_fit_authorized",
+    "artifacts",
+    "gate_sets",
     "freeze_sha256"
   ],
   "properties": {
-    "schema_version": {"const": "2.0.0"},
+    "schema_version": {"const": "2.1.0"},
     "freeze_id": {"type": "string", "minLength": 1},
     "created_at": {"type": "string", "format": "date-time"},
-    "config_sha256": {"$ref": "#/$defs/sha256"},
-    "catalog_sha256": {"$ref": "#/$defs/sha256"},
-    "dataset_manifest_sha256": {"$ref": "#/$defs/sha256"},
-    "prediction_sha256": {"$ref": "#/$defs/sha256"},
-    "template_sha256": {"$ref": "#/$defs/sha256"},
-    "gates": {
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "config",
+        "catalog",
+        "dataset",
+        "tuning",
+        "models",
+        "predictions",
+        "ddt",
+        "templates",
+        "fits",
+        "study_result",
+        "software"
+      ],
+      "properties": {
+        "config": {"$ref": "#/$defs/sha256"},
+        "catalog": {"$ref": "#/$defs/sha256"},
+        "dataset": {"$ref": "#/$defs/sha256"},
+        "tuning": {"$ref": "#/$defs/sha256"},
+        "models": {"$ref": "#/$defs/sha256"},
+        "predictions": {"$ref": "#/$defs/sha256"},
+        "ddt": {"$ref": "#/$defs/sha256"},
+        "templates": {"$ref": "#/$defs/sha256"},
+        "fits": {"$ref": "#/$defs/sha256"},
+        "study_result": {"$ref": "#/$defs/sha256"},
+        "software": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "gate_sets": {
+      "type": "object",
+      "required": [
+        "xgboost-seed-17",
+        "xgboost-seed-42",
+        "xgboost-seed-314",
+        "xgboost-seed-2026",
+        "xgboost-seed-2718",
+        "xgboost-ensemble",
+        "cut_based-ensemble"
+      ],
+      "additionalProperties": {"$ref": "#/$defs/gateSet"},
+      "properties": {
+        "xgboost-seed-17": {"$ref": "#/$defs/gateSet"},
+        "xgboost-seed-42": {"$ref": "#/$defs/gateSet"},
+        "xgboost-seed-314": {"$ref": "#/$defs/gateSet"},
+        "xgboost-seed-2026": {"$ref": "#/$defs/gateSet"},
+        "xgboost-seed-2718": {"$ref": "#/$defs/gateSet"},
+        "xgboost-ensemble": {"$ref": "#/$defs/gateSet"},
+        "cut_based-ensemble": {"$ref": "#/$defs/gateSet"}
+      }
+    },
+    "freeze_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "correlationGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "maximum_absolute", "passed"],
+      "properties": {
+        "value": {"type": "number"},
+        "maximum_absolute": {"type": "number", "exclusiveMinimum": 0},
+        "passed": {"const": true}
+      }
+    },
+    "acceptanceGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["values", "minimum", "maximum", "passed"],
+      "properties": {
+        "values": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "minimum": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximum": {"type": "number", "minimum": 0, "maximum": 1},
+        "passed": {"const": true}
+      }
+    },
+    "spuriousGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value_sigma", "maximum_sigma", "passed"],
+      "properties": {
+        "value_sigma": {"type": "number", "minimum": 0},
+        "maximum_sigma": {"type": "number", "exclusiveMinimum": 0},
+        "passed": {"const": true}
+      }
+    },
+    "gateSet": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "mc_spearman",
         "data_sideband_spearman",
         "sideband_acceptance",
-        "spurious_signal"
+        "spurious_signal",
+        "all_passed"
       ],
       "properties": {
-        "mc_spearman": {"const": true},
-        "data_sideband_spearman": {"const": true},
-        "sideband_acceptance": {"const": true},
-        "spurious_signal": {"const": true}
+        "mc_spearman": {"$ref": "#/$defs/correlationGate"},
+        "data_sideband_spearman": {"$ref": "#/$defs/correlationGate"},
+        "sideband_acceptance": {"$ref": "#/$defs/acceptanceGate"},
+        "spurious_signal": {"$ref": "#/$defs/spuriousGate"},
+        "all_passed": {"const": true}
       }
-    },
-    "observed_fit_authorized": {"const": true},
-    "freeze_sha256": {"$ref": "#/$defs/sha256"}
-  },
-  "$defs": {
-    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+    }
   }
 }

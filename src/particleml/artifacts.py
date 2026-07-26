@@ -31,7 +31,7 @@ class Artifact:
 
     path: Path
     sha256: str
-    schema_version: str = "2.0.0"
+    schema_version: str = "2.1.0"
 
 
 def _payload_records(directory: Path) -> list[dict[str, Any]]:
@@ -83,7 +83,7 @@ def publish_artifact(
         payloads = _payload_records(partial)
         artifact_hash = sha256_document(payloads)
         marker = {
-            "schema_version": "2.0.0",
+            "schema_version": "2.1.0",
             "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "writer_version": writer_version,
             "input_hashes": dict(sorted(input_hashes.items())),
@@ -107,7 +107,7 @@ def verify_artifact(path: Path) -> Artifact:
     if not marker_path.is_file():
         raise IntegrityError("ARTIFACT_INCOMPLETE", f"missing {marker_path}")
     marker = json.loads(marker_path.read_text(encoding="utf-8"))
-    if marker.get("schema_version") != "2.0.0":
+    if marker.get("schema_version") != "2.1.0":
         raise IntegrityError("ARTIFACT_VERSION", "unsupported completion record version")
     actual = _payload_records(path)
     if actual != marker.get("payloads"):

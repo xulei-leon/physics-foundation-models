@@ -60,7 +60,7 @@ def build_blinded_report(
         lines.extend(f"- `{name}`: `{digest}`" for name, digest in sorted(input_hashes.items()))
         (partial / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
         evidence = {
-            "schema_version": "2.0.0",
+            "schema_version": "2.1.0",
             "blinded": True,
             "metrics": dict(metrics),
             "fit_result": dict(fit_result),
@@ -83,5 +83,5 @@ def build_blinded_report(
         validator,
         input_hashes,
         config_sha256,
-        "particleml-0.2.0",
+        "particleml-0.3.0",
     )

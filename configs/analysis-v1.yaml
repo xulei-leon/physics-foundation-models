@@ -1,4 +1,4 @@
-schema_version: "2.0.0"
+schema_version: "2.1.0"
 analysis_id: atlas-h4l-v1
 research_plan_version: "1.0.0"
 luminosity_pb: 36000.0
@@ -7,6 +7,7 @@ blinding:
   analysis_max_gev: 160.0
   signal_min_gev: 120.0
   signal_max_gev: 130.0
+  persistence_mode: sideband_only
 selection:
   lepton_count: 4
   ordered_pt_min_gev: [20.0, 15.0, 10.0, 7.0]
@@ -27,6 +28,15 @@ split:
 models:
   formal_seeds: [17, 42, 314, 2026, 2718]
   tuning_seed: 42
+  tuning:
+    metric: weighted_roc_auc
+    tie_tolerance: 0.000001
+    logistic_c: [0.1, 1.0, 10.0]
+    xgboost_n_estimators: [200, 400]
+    xgboost_max_depth: [2, 3, 4]
+    xgboost_learning_rate: [0.03, 0.05]
+    mlp_hidden_layer_sizes: [[32], [64, 32]]
+    mlp_alpha: [0.0001, 0.001]
   logistic:
     C: 1.0
     max_iter: 2000
@@ -41,6 +51,7 @@ models:
     hidden_layer_sizes: [64, 32]
     alpha: 0.0001
     max_iter: 500
+    solver: lbfgs
 features:
   primary:
     - lep1_pt_fraction
@@ -80,6 +91,8 @@ ddt:
   max_spurious_signal_sigma: 0.2
 fit:
   mass_bin_width_gev: 1.0
+  template_test_fraction: 0.1
+  template_weight_scale: 10.0
   luminosity_uncertainty: 0.021
   signal_theory_uncertainty: 0.05
   irreducible_background_uncertainty: 0.10

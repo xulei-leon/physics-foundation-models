@@ -10,7 +10,7 @@ profile-likelihood sensitivity over a fixed cut-based baseline.
 | Item | Status |
 |---|---|
 | Research question and protocol | frozen in Research Plan v1.0.0 |
-| Software and schemas | implementation under contract 2.0.0 |
+| Software and schemas | implementation under contract 2.1.0 |
 | Offline synthetic pipeline | implementation and verification target |
 | Full public-data catalog | planned; must be frozen through direct HTTPS |
 | Formal five-seed training | planned |
@@ -24,6 +24,7 @@ profile-likelihood sensitivity over a fixed cut-based baseline.
 - [Model selection](research/model-selection.md)
 - [Statistical analysis plan](research/statistical-analysis-plan.md)
 - [Software architecture](software/architecture.md)
+- [Jetson Orin Nano development guide](engineering/jetson-orin-nano-development-guide.md)
 - [Analysis run guide](engineering/analysis-run-guide.md)
 - [Migration plan](plans/2026-07-25-atlas-h4l-v1-migration-plan.md)
 

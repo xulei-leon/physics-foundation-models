@@ -1,4 +1,4 @@
-"""Validate the active particleML v2 documentation and contract suite."""
+"""Validate the active particleML v2.1 documentation and contract suite."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ REQUIRED_FILES = (
     DOCS / "software" / "specification.md",
     DOCS / "software" / "traceability-matrix.md",
     DOCS / "engineering" / "development-and-debugging.md",
+    DOCS / "engineering" / "jetson-orin-nano-development-guide.md",
     DOCS / "engineering" / "data-access-guide.md",
     DOCS / "engineering" / "analysis-run-guide.md",
     DOCS / "references" / "h4l-literature-dossier.md",
@@ -43,7 +44,11 @@ SCHEMAS = (
     "split-manifest",
     "run-record",
     "prediction-metadata",
+    "model-metadata",
+    "tuning-decision",
+    "study-result",
     "analysis-freeze",
+    "unblinding-authorization",
     "fit-result",
 )
 STALE_TERMS = ("C" + "MS", "Jet" + "Class", "Omni" + "Learned", "top-" + "tagging")
@@ -69,14 +74,14 @@ def validate_versions_and_status() -> None:
     index = (DOCS / "index.md").read_text(encoding="utf-8")
     for token, source in (
         ("Research Plan v1.0.0", research),
-        ("Software Requirements 2.0.0", requirements),
-        ('version = "0.2.0"', pyproject),
+        ("Software Requirements 2.1.0", requirements),
+        ('version = "0.3.0"', pyproject),
         ("blinded", index.lower()),
         ("planned", requirements),
     ):
         if token not in source:
             fail(f"required version/status token is absent: {token}")
-    if "observed fit | planned" not in requirements:
+    if "authorized observed fit | planned" not in requirements:
         fail("the observed fit must remain planned")
 
 
@@ -89,8 +94,8 @@ def validate_schemas() -> None:
         Draft202012Validator.check_schema(schema)
         if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
             fail(f"{path.name} does not declare Draft 2020-12")
-        if "/2.0.0/" not in str(schema.get("$id", "")):
-            fail(f"{path.name} does not use contract version 2.0.0")
+        if "/2.1.0/" not in str(schema.get("$id", "")):
+            fail(f"{path.name} does not use contract version 2.1.0")
 
 
 def validate_links() -> None:

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://particleml.local/schemas/2.1.0/study-result.schema.json",
+  "title": "particleML blinded study result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_sha256",
+    "tuning_sha256",
+    "status",
+    "blocking_reasons",
+    "models",
+    "primary_comparison",
+    "generator_diagnostics"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.1.0"},
+    "dataset_sha256": {"$ref": "#/$defs/sha256"},
+    "tuning_sha256": {"$ref": "#/$defs/sha256"},
+    "status": {"enum": ["completed", "blocked"]},
+    "blocking_reasons": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "models": {
+      "type": "object",
+      "required": ["cut_based", "logistic", "xgboost", "mlp"],
+      "additionalProperties": {"type": "object"}
+    },
+    "primary_comparison": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["xgboost_expected_significance", "cut_based_expected_significance", "delta"],
+          "properties": {
+            "xgboost_expected_significance": {"type": "number"},
+            "cut_based_expected_significance": {"type": "number"},
+            "delta": {"type": "number"}
+          }
+        }
+      ]
+    },
+    "generator_diagnostics": {"type": "array", "items": {"type": "object"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

@@ -31,8 +31,11 @@ def template_frame() -> pd.DataFrame:
                         "ddt_score": 0.9 if category == "high" else 0.5,
                         "channel": state,
                         "process_group": process,
+                        "sample_role": "nominal",
                         "is_data": False,
                         "w_yield": weight,
+                        "split": "test",
+                        "dataset_id": f"mc-{process}",
                     }
                 )
     return pd.DataFrame(rows)
@@ -77,3 +80,23 @@ def test_six_channel_workspace_nuisances_and_expected_fit() -> None:
     )
     assert comparison["absolute_delta"] == 1.0
     assert comparison["relative_delta"] == 0.5
+
+
+def test_nominal_templates_exclude_variations_and_apply_fixed_scaling() -> None:
+    frame = template_frame()
+    frame.loc[frame["process_group"] == "signal", "dataset_id"] = "mc-1"
+    variation = frame[frame["process_group"] == "signal"].copy()
+    variation["sample_role"] = "generator_variation"
+    variation["dataset_id"] = "mc-101"
+    variation["variation_of"] = 1
+    variation["w_yield"] = 7.0
+    combined = pd.concat([frame, variation], ignore_index=True)
+    nominal = build_templates(combined, bin_width=55.0, weight_scale=10.0)
+    assert nominal["4e_low"]["yields"]["signal"] == [50.0]
+    replacement = build_templates(
+        combined,
+        bin_width=55.0,
+        weight_scale=10.0,
+        generator_replacement=1,
+    )
+    assert replacement["4e_low"]["yields"]["signal"] == [70.0]

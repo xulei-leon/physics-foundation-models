@@ -36,6 +36,8 @@ def audit_frame(frame: pd.DataFrame) -> dict[str, object]:
         "event_id",
         "is_data",
         "process_group",
+        "sample_role",
+        "region",
         "channel",
         "split",
         "target",
@@ -50,14 +52,20 @@ def audit_frame(frame: pd.DataFrame) -> dict[str, object]:
         raise ContractError("AUDIT_DUPLICATE", "event_id values are not unique")
     data = frame[frame["is_data"].astype(bool)]
     simulation = frame[~frame["is_data"].astype(bool)]
+    nominal_simulation = simulation[simulation["sample_role"].astype(str) == "nominal"]
+    variations = simulation[simulation["sample_role"].astype(str) != "nominal"]
     if data["target"].notna().any() or data["w_train"].notna().any():
         raise ContractError("AUDIT_DATA_LABEL", "data contain target or training weights")
     if set(data["split"].unique()) - {"data"}:
         raise ContractError("AUDIT_DATA_SPLIT", "data entered a simulation split")
+    if set(data["region"].astype(str).unique()) - {"sideband"}:
+        raise ContractError("AUDIT_BLINDING", "pre-freeze data contain signal-window rows")
     if set(simulation["split"].unique()) - set(SPLITS):
         raise ContractError("AUDIT_MC_SPLIT", "simulation has an invalid split")
-    if simulation["target"].isna().any() or simulation["w_train"].isna().any():
-        raise ContractError("AUDIT_MC_LABEL", "simulation is missing target or training weight")
+    if nominal_simulation["target"].isna().any() or nominal_simulation["w_train"].isna().any():
+        raise ContractError("AUDIT_MC_LABEL", "nominal simulation is missing target or weight")
+    if variations["w_train"].notna().any():
+        raise ContractError("AUDIT_VARIATION_WEIGHT", "generator variations have training weight")
     if not frame["m4l"].between(105.0, 160.0, inclusive="left").all():
         raise ContractError("AUDIT_MASS_RANGE", "m4l is outside [105, 160) GeV")
     if not all(math.isfinite(float(value)) for value in frame["w_yield"]):
@@ -66,6 +74,7 @@ def audit_frame(frame: pd.DataFrame) -> dict[str, object]:
         "rows": len(frame),
         "data_rows": len(data),
         "simulation_rows": len(simulation),
+        "variation_rows": len(variations),
         "datasets": int(frame["dataset_id"].nunique()),
         "channels": sorted(str(value) for value in frame["channel"].unique()),
     }

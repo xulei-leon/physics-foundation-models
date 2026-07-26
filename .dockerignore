@@ -10,9 +10,12 @@
 .pytest_cache/
 .ruff_cache/
 build/
+artifacts/
+cache/
 data/
 dist/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 node_modules/
+tmp/
 project/4-Reviews/

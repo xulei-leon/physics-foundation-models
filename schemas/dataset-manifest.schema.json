@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://particleml.local/schemas/2.0.0/dataset-manifest.schema.json",
+  "$id": "https://particleml.local/schemas/2.1.0/dataset-manifest.schema.json",
   "title": "particleML canonical Parquet dataset manifest",
   "type": "object",
   "additionalProperties": false,
@@ -17,7 +17,7 @@
     "cutflow"
   ],
   "properties": {
-    "schema_version": {"const": "2.0.0"},
+    "schema_version": {"const": "2.1.0"},
     "dataset_id": {"type": "string", "minLength": 1},
     "catalog_sha256": {"$ref": "#/$defs/sha256"},
     "config_sha256": {"$ref": "#/$defs/sha256"},

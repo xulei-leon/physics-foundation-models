@@ -8,7 +8,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import awkward as ak  # type: ignore[import-untyped]
 import pandas as pd  # type: ignore[import-untyped]
@@ -33,7 +33,7 @@ BASE_BRANCHES = (
     "lep_pt",
     "lep_eta",
     "lep_phi",
-    "lep_E",
+    "lep_e",
     "lep_charge",
     "lep_type",
     "lep_isTightID",
@@ -43,7 +43,7 @@ BASE_BRANCHES = (
     "jet_pt",
     "jet_eta",
     "jet_phi",
-    "jet_E",
+    "jet_e",
     "met_mpx",
     "met_mpy",
     "trigE",
@@ -53,11 +53,15 @@ BASE_BRANCHES = (
     "trigML",
 )
 MC_BRANCHES = (
+    "xsec",
+    "kfac",
+    "filteff",
+    "sum_of_weights",
     "mcWeight",
-    "scaleFactor_PILEUP",
-    "scaleFactor_ELE",
-    "scaleFactor_MUON",
-    "scaleFactor_LepTRIGGER",
+    "ScaleFactor_PILEUP",
+    "ScaleFactor_ELE",
+    "ScaleFactor_MUON",
+    "ScaleFactor_LepTRIGGER",
 )
 
 
@@ -69,6 +73,10 @@ class SourceDescriptor:
     file_checksum: str
     is_data: bool
     process_group: str
+    sample_role: str = "nominal"
+    production_mode: str | None = None
+    partition: str = "inclusive"
+    variation_of: int | None = None
     xsec_pb: float | None = None
     kfactor: float | None = None
     filter_efficiency: float | None = None
@@ -89,7 +97,7 @@ def _leptons(chunk: ak.Array, row: int) -> list[Lepton]:
             "lep_pt",
             "lep_eta",
             "lep_phi",
-            "lep_E",
+            "lep_e",
             "lep_charge",
             "lep_type",
             "lep_isTightID",
@@ -107,7 +115,7 @@ def _leptons(chunk: ak.Array, row: int) -> list[Lepton]:
             pt=float(values["lep_pt"][index]) * MEV_TO_GEV,
             eta=float(values["lep_eta"][index]),
             phi=float(values["lep_phi"][index]),
-            energy=float(values["lep_E"][index]) * MEV_TO_GEV,
+            energy=float(values["lep_e"][index]) * MEV_TO_GEV,
             charge=int(values["lep_charge"][index]),
             flavor=int(values["lep_type"][index]),
             tight_id=bool(values["lep_isTightID"][index]),
@@ -122,7 +130,7 @@ def _jet_summary(chunk: ak.Array, row: int) -> tuple[int, float, float]:
     pts = [float(value) * MEV_TO_GEV for value in _as_list(chunk, "jet_pt", row)]
     etas = [float(value) for value in _as_list(chunk, "jet_eta", row)]
     phis = [float(value) for value in _as_list(chunk, "jet_phi", row)]
-    energies = [float(value) * MEV_TO_GEV for value in _as_list(chunk, "jet_E", row)]
+    energies = [float(value) * MEV_TO_GEV for value in _as_list(chunk, "jet_e", row)]
     if not (len(pts) == len(etas) == len(phis) == len(energies)):
         raise ContractError("INGEST_JET_LENGTH", "jet branches have different lengths")
     order = sorted(range(len(pts)), key=lambda index: (-pts[index], index))
@@ -141,24 +149,62 @@ def _branches(is_data: bool) -> tuple[str, ...]:
     return BASE_BRANCHES if is_data else BASE_BRANCHES + MC_BRANCHES
 
 
+def _validate_normalization_chunk(
+    chunk: ak.Array,
+    source: SourceDescriptor,
+    relative_tolerance: float,
+) -> None:
+    """Check ROOT normalization constants against the frozen metadata table."""
+
+    if source.is_data or len(chunk) == 0:
+        return
+    checks = {
+        "xsec": source.xsec_pb,
+        "kfac": source.kfactor,
+        "filteff": source.filter_efficiency,
+        "sum_of_weights": source.sum_of_generator_weights,
+    }
+    for branch, expected in checks.items():
+        if expected is None:
+            raise ContractError("INGEST_NORMALIZATION", f"missing catalog value for {branch}")
+        actual = float(cast(Any, chunk[branch][0]))
+        if not math.isfinite(actual) or not math.isclose(
+            actual,
+            float(expected),
+            rel_tol=relative_tolerance,
+            abs_tol=0.0,
+        ):
+            raise ContractError(
+                "INGEST_NORMALIZATION",
+                f"{source.dataset_id} {branch} expected {expected}, found {actual}",
+            )
+
+
 def iter_root_events(
     path: Path,
     source: SourceDescriptor,
     selection: Selection,
     luminosity_pb: float,
-    tree_name: str = "mini",
+    tree_name: str = "analysis",
     chunk_size: int = 50_000,
+    data_mode: str = "sideband_only",
+    signal_min_gev: float = 120.0,
+    signal_max_gev: float = 130.0,
+    normalization_rtol: float = 1e-5,
 ) -> Iterator[dict[str, object]]:
     """Yield selected canonical rows from one ROOT file."""
 
     entry_offset = 0
     target = None if source.is_data else int(source.process_group == "signal")
+    if data_mode not in {"sideband_only", "observed"}:
+        raise ContractError("INGEST_DATA_MODE", f"unsupported data mode: {data_mode}")
     for chunk in uproot.iterate(
         f"{path}:{tree_name}",
         expressions=list(_branches(source.is_data)),
         step_size=chunk_size,
         library="ak",
     ):
+        _validate_normalization_chunk(chunk, source, normalization_rtol)
         for local_index in range(len(chunk)):
             entry_index = entry_offset + local_index
             if int(chunk["lep_n"][local_index]) != 4:
@@ -170,6 +216,10 @@ def iter_root_events(
             }
             selected = select_four_lepton_event(leptons, triggers, selection)
             if selected is None:
+                continue
+            mass = float(cast(Any, selected["m4l"]))
+            in_signal_window = signal_min_gev <= mass < signal_max_gev
+            if source.is_data and data_mode == "sideband_only" and in_signal_window:
                 continue
             jet_n, leading_jet_pt, dijet_mass = _jet_summary(chunk, local_index)
             met = math.hypot(
@@ -183,6 +233,17 @@ def iter_root_events(
                 "entry_index": entry_index,
                 "is_data": source.is_data,
                 "process_group": source.process_group,
+                "sample_role": source.sample_role,
+                "production_mode": source.production_mode,
+                "sample_partition": source.partition,
+                "variation_of": source.variation_of,
+                "region": (
+                    "signal"
+                    if source.is_data and in_signal_window
+                    else "sideband"
+                    if source.is_data
+                    else "simulation"
+                ),
                 "target": target,
                 "jet_n": jet_n,
                 "leading_jet_pt": leading_jet_pt,
@@ -199,11 +260,11 @@ def iter_root_events(
                     "filter_efficiency": source.filter_efficiency,
                     "sum_of_generator_weights": source.sum_of_generator_weights,
                     "mcWeight": float(chunk["mcWeight"][local_index]),
-                    "ScaleFactor_PILEUP": float(chunk["scaleFactor_PILEUP"][local_index]),
-                    "ScaleFactor_ELE": float(chunk["scaleFactor_ELE"][local_index]),
-                    "ScaleFactor_MUON": float(chunk["scaleFactor_MUON"][local_index]),
+                    "ScaleFactor_PILEUP": float(chunk["ScaleFactor_PILEUP"][local_index]),
+                    "ScaleFactor_ELE": float(chunk["ScaleFactor_ELE"][local_index]),
+                    "ScaleFactor_MUON": float(chunk["ScaleFactor_MUON"][local_index]),
                     "ScaleFactor_LepTRIGGER": float(
-                        chunk["scaleFactor_LepTRIGGER"][local_index]
+                        chunk["ScaleFactor_LepTRIGGER"][local_index]
                     ),
                 }
                 row["w_yield"] = yield_weight(metadata, luminosity_pb)
@@ -215,8 +276,12 @@ def ingest_sources(
     sources: Sequence[tuple[Path, SourceDescriptor]],
     selection: Selection,
     luminosity_pb: float,
-    tree_name: str = "mini",
+    tree_name: str = "analysis",
     chunk_size: int = 50_000,
+    data_mode: str = "sideband_only",
+    signal_min_gev: float = 120.0,
+    signal_max_gev: float = 130.0,
+    normalization_rtol: float = 1e-5,
 ) -> list[dict[str, object]]:
     """Ingest all files, normalize training weights, and assign splits."""
 
@@ -236,6 +301,10 @@ def ingest_sources(
                 luminosity_pb,
                 tree_name=tree_name,
                 chunk_size=chunk_size,
+                data_mode=data_mode,
+                signal_min_gev=signal_min_gev,
+                signal_max_gev=signal_max_gev,
+                normalization_rtol=normalization_rtol,
             )
         )
     return split_rows(attach_training_weights(rows))
@@ -257,7 +326,7 @@ def publish_canonical_dataset(
         parquet = partial / "events.parquet"
         frame.to_parquet(parquet, index=False)
         manifest = {
-            "schema_version": "2.0.0",
+            "schema_version": "2.1.0",
             "dataset_id": dataset_id,
             "catalog_sha256": catalog_sha256,
             "config_sha256": config_sha256,
@@ -276,7 +345,7 @@ def publish_canonical_dataset(
         }
         (partial / "dataset-manifest.json").write_bytes(canonical_json_bytes(manifest))
         split_manifest = {
-            "schema_version": "2.0.0",
+            "schema_version": "2.1.0",
             "algorithm": "sha256-bucket-v1",
             "identity_fields": ["dataset_id", "file_checksum", "entry_index"],
             "fractions": {
@@ -321,5 +390,5 @@ def publish_canonical_dataset(
         validator,
         {"catalog_sha256": catalog_sha256},
         config_sha256,
-        "particleml-0.2.0",
+        "particleml-0.3.0",
     )

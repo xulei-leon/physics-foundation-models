@@ -1,5 +1,7 @@
-schema_version: "2.0.0"
+schema_version: "2.1.0"
 catalog_id: atlas-exactly4lep-2015-2016-v1
+metadata_table_url: https://opendata.atlas.cern/files/metadata.csv
+download_base_url: https://opendata.cern.ch/eos/opendata/atlas/rucio/opendata/
 records:
   - record_id: atlas-93924
     kind: data
@@ -11,11 +13,29 @@ transport:
   allowed_schemes: [https]
   verify_tls: true
   require_sha256: true
-classification:
-  signal_name_requires: [H125]
-  signal_name_requires_any: [ZZ4l, ZZ4lep]
-  process_groups:
-    irreducible_background: [ZZ]
-    reducible_background: [Zjets, ttbar]
-  unknown_process_policy: reject
-  alternative_generator_policy: systematic_only
+samples:
+  nominal_signal:
+    - {dataset_number: 345060, production_mode: ggF, partition: inclusive}
+    - {dataset_number: 345066, production_mode: ggZH, partition: inclusive}
+    - {dataset_number: 346228, production_mode: VBF, partition: inclusive}
+    - {dataset_number: 346340, production_mode: ttH, partition: allhad}
+    - {dataset_number: 346341, production_mode: ttH, partition: semilep}
+    - {dataset_number: 346342, production_mode: ttH, partition: dilep}
+    - {dataset_number: 346414, production_mode: tHjb, partition: inclusive}
+    - {dataset_number: 346511, production_mode: tWH, partition: inclusive}
+    - {dataset_number: 346645, production_mode: qqZH, partition: inclusive}
+  generator_variations:
+    - {dataset_number: 346446, production_mode: ggF, partition: inclusive, replaces: 345060}
+    - {dataset_number: 346447, production_mode: VBF, partition: inclusive, replaces: 346228}
+    - {dataset_number: 346448, production_mode: qqZH, partition: inclusive, replaces: 346645}
+    - {dataset_number: 346451, production_mode: ggZH, partition: inclusive, replaces: 345066}
+    - {dataset_number: 346452, production_mode: ttH, partition: allhad, replaces: 346340}
+    - {dataset_number: 346453, production_mode: ttH, partition: semilep, replaces: 346341}
+    - {dataset_number: 346454, production_mode: ttH, partition: dilep, replaces: 346342}
+  irreducible_background: [700600]
+  reducible_background:
+    zjets:
+      [700320, 700321, 700322, 700323, 700324, 700325,
+       700467, 700468, 700469, 700470, 700471, 700472,
+       700792, 700793, 700794]
+    ttbar: [410470, 410471]

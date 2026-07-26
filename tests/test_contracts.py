@@ -52,7 +52,7 @@ def test_model_input_hash_is_stable_and_order_sensitive() -> None:
 
 def test_dataset_catalog_rejects_unknown_key() -> None:
     document = {
-        "schema_version": "2.0.0",
+        "schema_version": "2.1.0",
         "catalog_id": "fixture",
         "created_at": "2026-07-25T00:00:00Z",
         "records": [
@@ -76,7 +76,7 @@ def test_dataset_catalog_rejects_unknown_key() -> None:
 
 def test_prediction_schema_requires_exact_payload_fields() -> None:
     document = {
-        "schema_version": "2.0.0",
+        "schema_version": "2.1.0",
         "run_record_sha256": ZERO_HASH,
         "dataset_manifest_sha256": ZERO_HASH,
         "model_name": "xgboost",

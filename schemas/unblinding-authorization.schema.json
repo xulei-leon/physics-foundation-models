@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://particleml.local/schemas/2.1.0/unblinding-authorization.schema.json",
+  "title": "particleML independent unblinding authorization",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "authorization_id",
+    "created_at",
+    "freeze_sha256",
+    "approver",
+    "statement",
+    "allowed_workspaces",
+    "authorization_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.1.0"},
+    "authorization_id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "freeze_sha256": {"$ref": "#/$defs/sha256"},
+    "approver": {"type": "string", "minLength": 1},
+    "statement": {
+      "const": "I authorize the frozen particleML analysis to process the blinded 120--130 GeV data window only for the two declared observed workspaces."
+    },
+    "allowed_workspaces": {
+      "type": "array",
+      "prefixItems": [
+        {"const": "xgboost-ensemble"},
+        {"const": "cut_based-ensemble"}
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "authorization_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

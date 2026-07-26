@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "particleml-research"
-version = "0.2.0"
+version = "0.3.0"
 description = "Reproducible ATLAS Open Data H-to-ZZ-to-four-lepton ML analysis."
 readme = "README.md"
 requires-python = ">=3.10"

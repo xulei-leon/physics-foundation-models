@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://particleml.local/schemas/2.1.0/model-metadata.schema.json",
+  "title": "particleML frozen model metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "model_name",
+    "fields",
+    "seeds",
+    "libraries",
+    "files"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.1.0"},
+    "model_name": {"enum": ["cut_based", "logistic", "xgboost", "mlp"]},
+    "fields": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"}
+    },
+    "seeds": {"const": [17, 42, 314, 2026, 2718]},
+    "libraries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scikit_learn", "xgboost"],
+      "properties": {
+        "scikit_learn": {"type": "string", "minLength": 1},
+        "xgboost": {"type": "string", "minLength": 1}
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["seed", "path", "format", "sha256"],
+        "properties": {
+          "seed": {"enum": [17, 42, 314, 2026, 2718]},
+          "path": {"type": "string", "minLength": 1},
+          "format": {"enum": ["particleml-cut-v1", "xgboost-json", "joblib"]},
+          "sha256": {"$ref": "#/$defs/sha256"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

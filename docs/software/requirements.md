@@ -1,4 +1,4 @@
-# Software Requirements 2.0.0
+# Software Requirements 2.1.0
 
 Requirement status is one of `implemented`, `tested`, or `planned`. `Tested`
 requires an automated retained test; it does not imply a completed physics
@@ -15,12 +15,18 @@ analysis.
 | FEAT-001 | Reject mass, identity, process, truth, and weight model inputs | tested |
 | MODEL-001 | Provide cut-based, Logistic, XGBoost, and sklearn MLP paths | implemented |
 | MODEL-002 | Align five fixed-seed predictions and publish an ensemble mean | tested |
+| MODEL-003 | Persist every formal model and verify predictions after reload | tested |
+| TUNE-001 | Permit one declared seed-42 validation-only tuning pass | implemented |
 | DDT-001 | Fit conditional CDF on calibration-background simulation only | tested |
 | DDT-002 | Enforce correlation, acceptance, and spurious-signal gates | tested |
 | FIT-001 | Build six-channel 1 GeV pyhf model with fixed nuisances | tested |
-| BLIND-001 | Refuse observed fit without explicit flag and matching freeze | tested |
+| FIT-002 | Restrict nominal templates to nominal test simulation with fixed yield scaling | tested |
+| BLIND-001 | Refuse observed access without explicit intent and matching freeze | tested |
+| BLIND-002 | Require a separate self-hashed human authorization | tested |
+| BLIND-003 | Reproduce sidebands before full-range observed processing | tested |
+| FREEZE-001 | Bind all formal artifacts and raw gate values without authorizing observed access | tested |
 | ART-001 | Publish formal outputs atomically with completion records | tested |
-| CLI-001 | Expose the breaking v2 command surface | tested |
+| CLI-001 | Expose the breaking v2.1 command surface | tested |
 | DOC-001 | Validate documentation links, versions, statuses, and stale terms | tested |
 | SCI-001 | Produce formal five-seed and expected-fit results | planned |
 | SCI-002 | Create an analysis freeze after all real sideband gates pass | planned |

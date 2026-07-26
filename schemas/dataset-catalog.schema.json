@@ -1,25 +1,42 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://particleml.local/schemas/2.0.0/dataset-catalog.schema.json",
+  "$id": "https://particleml.local/schemas/2.1.0/dataset-catalog.schema.json",
   "title": "particleML dataset catalog",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "catalog_id", "created_at", "records", "files"],
+  "required": [
+    "schema_version",
+    "catalog_id",
+    "created_at",
+    "metadata_table",
+    "records",
+    "files"
+  ],
   "properties": {
-    "schema_version": {"const": "2.0.0"},
+    "schema_version": {"const": "2.1.0"},
     "catalog_id": {"type": "string", "minLength": 1},
     "created_at": {"type": "string", "format": "date-time"},
+    "metadata_table": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "sha256"],
+      "properties": {
+        "url": {"type": "string", "pattern": "^https://"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
     "records": {
       "type": "array",
       "minItems": 2,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["record_id", "kind", "metadata_url"],
+        "required": ["record_id", "kind", "metadata_url", "metadata_sha256"],
         "properties": {
           "record_id": {"enum": ["atlas-93924", "atlas-93928"]},
           "kind": {"enum": ["data", "mc"]},
-          "metadata_url": {"type": "string", "pattern": "^https://"}
+          "metadata_url": {"type": "string", "pattern": "^https://"},
+          "metadata_sha256": {"$ref": "#/$defs/sha256"}
         }
       }
     },
@@ -35,23 +52,39 @@
       "additionalProperties": false,
       "required": [
         "dataset_id",
+        "dataset_number",
         "record_id",
         "url",
+        "cache_name",
         "sha256",
+        "adler32",
         "size_bytes",
         "is_data",
-        "process_group"
+        "process_group",
+        "sample_role",
+        "production_mode",
+        "partition",
+        "variation_of",
+        "generator_group",
+        "is_nominal"
       ],
       "properties": {
         "dataset_id": {"type": "string", "minLength": 1},
+        "dataset_number": {"type": ["integer", "null"], "minimum": 1},
         "record_id": {"enum": ["atlas-93924", "atlas-93928"]},
         "url": {"type": "string", "pattern": "^https://"},
+        "cache_name": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$"},
         "sha256": {"$ref": "#/$defs/sha256"},
+        "adler32": {"type": "string", "pattern": "^[a-f0-9]{8}$"},
         "size_bytes": {"type": "integer", "minimum": 1},
         "is_data": {"type": "boolean"},
         "process_group": {
           "enum": ["data", "signal", "irreducible_background", "reducible_background"]
         },
+        "sample_role": {"enum": ["nominal", "generator_variation"]},
+        "production_mode": {"type": ["string", "null"]},
+        "partition": {"type": "string", "minLength": 1},
+        "variation_of": {"type": ["integer", "null"], "minimum": 1},
         "generator_group": {"type": ["string", "null"]},
         "is_nominal": {"type": "boolean", "default": true},
         "xsec_pb": {"type": "number", "exclusiveMinimum": 0},
@@ -65,7 +98,13 @@
           "then": {
             "properties": {
               "record_id": {"const": "atlas-93924"},
-              "process_group": {"const": "data"}
+              "process_group": {"const": "data"},
+              "dataset_number": {"type": "null"},
+              "sample_role": {"const": "nominal"},
+              "production_mode": {"type": "null"},
+              "variation_of": {"type": "null"},
+              "generator_group": {"type": "null"},
+              "is_nominal": {"const": true}
             }
           },
           "else": {
@@ -78,6 +117,16 @@
               "filter_efficiency",
               "sum_of_generator_weights"
             ]
+          }
+        },
+        {
+          "if": {"properties": {"sample_role": {"const": "generator_variation"}}},
+          "then": {
+            "properties": {
+              "process_group": {"const": "signal"},
+              "is_nominal": {"const": false},
+              "variation_of": {"type": "integer", "minimum": 1}
+            }
           }
         }
       ]

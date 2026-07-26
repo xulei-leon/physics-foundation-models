@@ -36,12 +36,12 @@ def _write_channel_root(path: Path, flavors: list[int], size: int = 120) -> None
         lepton_pt.append([first_pt, first_pt, second_pt, second_pt])
         lepton_phi.append([0.0, math.pi, math.pi / 2, -math.pi / 2])
     with uproot.recreate(path) as root:
-        root["mini"] = {
+        root["analysis"] = {
             "lep_n": np.full(size, 4, dtype=np.int32),
             "lep_pt": ak.Array([[value * 1000.0 for value in row] for row in lepton_pt]),
             "lep_eta": ak.Array([[0.0] * 4 for _ in range(size)]),
             "lep_phi": ak.Array(lepton_phi),
-            "lep_E": ak.Array([[value * 1000.0 for value in row] for row in lepton_pt]),
+            "lep_e": ak.Array([[value * 1000.0 for value in row] for row in lepton_pt]),
             "lep_charge": ak.Array([[1, -1, 1, -1] for _ in range(size)]),
             "lep_type": ak.Array([flavors for _ in range(size)]),
             "lep_isTightID": ak.Array([[True] * 4 for _ in range(size)]),
@@ -51,7 +51,7 @@ def _write_channel_root(path: Path, flavors: list[int], size: int = 120) -> None
             "jet_pt": ak.Array([[0.0] for _ in range(size)]),
             "jet_eta": ak.Array([[0.0] for _ in range(size)]),
             "jet_phi": ak.Array([[0.0] for _ in range(size)]),
-            "jet_E": ak.Array([[0.0] for _ in range(size)]),
+            "jet_e": ak.Array([[0.0] for _ in range(size)]),
             "met_mpx": np.full(size, 5000.0),
             "met_mpy": np.zeros(size),
             "trigE": np.ones(size, dtype=np.bool_),
@@ -59,11 +59,15 @@ def _write_channel_root(path: Path, flavors: list[int], size: int = 120) -> None
             "trigDE": np.zeros(size, dtype=np.bool_),
             "trigDM": np.zeros(size, dtype=np.bool_),
             "trigML": np.zeros(size, dtype=np.bool_),
+            "xsec": np.ones(size),
+            "kfac": np.ones(size),
+            "filteff": np.ones(size),
+            "sum_of_weights": np.full(size, 120.0),
             "mcWeight": np.ones(size),
-            "scaleFactor_PILEUP": np.ones(size),
-            "scaleFactor_ELE": np.ones(size),
-            "scaleFactor_MUON": np.ones(size),
-            "scaleFactor_LepTRIGGER": np.ones(size),
+            "ScaleFactor_PILEUP": np.ones(size),
+            "ScaleFactor_ELE": np.ones(size),
+            "ScaleFactor_MUON": np.ones(size),
+            "ScaleFactor_LepTRIGGER": np.ones(size),
         }
 
 

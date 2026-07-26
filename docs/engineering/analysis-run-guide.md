@@ -1,47 +1,115 @@
 # Analysis Run Guide
 
-## Offline contract check
+## Offline software verification
 
 ```powershell
 particleml contracts validate
 pytest
+python scripts/validate_software_docs.py
 ```
+
+These checks verify software behavior with synthetic fixtures. They do not
+produce or validate a physics result.
 
 ## Formal blinded sequence
 
-```powershell
-particleml catalog validate --config configs/catalog-sources.yaml --catalog catalog.json
-particleml dataset build --config configs/analysis-v1.yaml --catalog catalog.json --output artifacts/dataset
-particleml audit data --dataset artifacts/dataset
-particleml run train --config configs/analysis-v1.yaml --dataset artifacts/dataset --output artifacts/training
-particleml decorrelate --config configs/analysis-v1.yaml --predictions artifacts/training --output artifacts/ddt
-particleml evaluate --config configs/analysis-v1.yaml --predictions artifacts/ddt --output artifacts/evaluation
-particleml fit expected --config configs/analysis-v1.yaml --predictions artifacts/ddt --output artifacts/expected-fit
-particleml report build --inputs artifacts/evaluation artifacts/expected-fit --output artifacts/blinded-report
-```
-
-The five model seeds and ensemble are produced by `run train`; callers do not
-substitute ad hoc seed lists.
-
-## Freeze
-
-After all simulation and real-data sideband gates pass:
+All analysis inputs are obtained by direct HTTPS and verified against size,
+Adler-32, and SHA-256 before ROOT access. The catalog command resolves only the
+declared data, nominal simulation, and generator-variation allowlists.
 
 ```powershell
-particleml analysis freeze --config configs/analysis-v1.yaml --inputs artifacts --output freeze.json
+particleml catalog freeze `
+  --config configs/catalog-sources.yaml `
+  --cache cache/atlas `
+  --output artifacts/catalog.json
+
+particleml dataset build `
+  --config configs/analysis-v1.yaml `
+  --catalog artifacts/catalog.json `
+  --cache cache/atlas `
+  --output artifacts/dataset
+
+particleml audit data `
+  --config configs/analysis-v1.yaml `
+  --dataset artifacts/dataset
+
+particleml study tune `
+  --config configs/analysis-v1.yaml `
+  --dataset artifacts/dataset `
+  --output artifacts/tuning
+
+particleml study run `
+  --config configs/analysis-v1.yaml `
+  --catalog artifacts/catalog.json `
+  --dataset artifacts/dataset `
+  --tuning artifacts/tuning `
+  --output artifacts/study
 ```
 
-A freeze binds exact configuration, catalog, dataset, prediction, and template
-hashes. Creating one does not run an observed fit.
+`study tune` is the one bounded validation-only tuning pass at seed 42.
+`study run` trains all four model families at the five formal seeds, reloads
+the persisted models, applies DDT to every seed and ensemble, uses nominal test
+simulation only for nominal templates, scales the 10% test yield by the fixed
+factor of ten, and produces expected fits and generator-replacement
+diagnostics. Alternative generators never enter nominal training or nominal
+yields.
 
-## Observed-fit refusal
+The study may complete with failed scientific gates so that failures remain
+auditable. A failed gate prevents the next command.
 
-Both explicit intent and a valid matching freeze are required:
+## Analysis freeze
+
+After inspecting the blinded study:
 
 ```powershell
-particleml fit observed --config configs/analysis-v1.yaml --freeze freeze.json --unblind
+particleml analysis freeze `
+  --config configs/analysis-v1.yaml `
+  --inputs artifacts `
+  --output artifacts/freeze.json
 ```
 
-Without `--unblind`, without a freeze, with any mismatched hash, or with any
-failed gate, the command exits before opening observed signal-window data.
-Migration acceptance never invokes this command on real data.
+The freeze records raw values and thresholds for the five XGBoost seeds, the
+XGBoost ensemble, and the cut-based ensemble. It binds hashes for the
+configuration, catalog, dataset, tuning decision, models, predictions, DDT
+calibrations, templates, fits, study result, and software record. It contains
+no observed-data authorization.
+
+## Independent authorization and observed processing
+
+Authorization is a separate explicit human action after review of the freeze:
+
+```powershell
+particleml analysis authorize `
+  --freeze artifacts/freeze.json `
+  --approver "APPROVER NAME" `
+  --output artifacts/unblinding-authorization.json
+```
+
+The authorization is self-hashed, bound to the freeze, and permits only the
+`xgboost-ensemble` and `cut_based-ensemble` observed workspaces. The blinded
+pipeline never creates this file automatically.
+
+An authorized observed run is:
+
+```powershell
+particleml analysis observed `
+  --config configs/analysis-v1.yaml `
+  --freeze artifacts/freeze.json `
+  --authorization artifacts/unblinding-authorization.json `
+  --catalog artifacts/catalog.json `
+  --cache cache/atlas `
+  --dataset artifacts/dataset `
+  --study artifacts/study `
+  --output artifacts/observed `
+  --unblind
+```
+
+Before any ROOT file is opened, this command validates every freeze,
+authorization, catalog, dataset, study, and cached-file hash. It then performs
+two reads: a sideband-only pass that must reproduce the frozen data rows, and
+a full `[105,160)` pass. Frozen models and DDT calibrations are reused. The two
+expected workspaces are copied and only their observation arrays are replaced.
+
+Do not run the authorization or observed commands during ordinary software
+testing. Real data in `[120,130)` remain blinded until a valid freeze and
+independent human authorization exist.

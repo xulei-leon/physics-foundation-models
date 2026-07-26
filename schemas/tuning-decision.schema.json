@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://particleml.local/schemas/2.1.0/tuning-decision.schema.json",
+  "title": "particleML one-time tuning decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_sha256",
+    "base_config_sha256",
+    "seed",
+    "selection_metric",
+    "tie_tolerance",
+    "models"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.1.0"},
+    "dataset_sha256": {"$ref": "#/$defs/sha256"},
+    "base_config_sha256": {"$ref": "#/$defs/sha256"},
+    "seed": {"const": 42},
+    "selection_metric": {"const": "weighted_roc_auc"},
+    "tie_tolerance": {"type": "number", "minimum": 0},
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logistic", "xgboost", "mlp"],
+      "properties": {
+        "logistic": {"$ref": "#/$defs/modelDecision"},
+        "xgboost": {"$ref": "#/$defs/modelDecision"},
+        "mlp": {"$ref": "#/$defs/modelDecision"}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "modelDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selected_index",
+        "selected_parameters",
+        "selection_metrics",
+        "candidates"
+      ],
+      "properties": {
+        "selected_index": {"type": "integer", "minimum": 0},
+        "selected_parameters": {"type": "object"},
+        "selection_metrics": {"type": "object"},
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["index", "parameters", "status", "warnings", "metrics"],
+            "properties": {
+              "index": {"type": "integer", "minimum": 0},
+              "parameters": {"type": "object"},
+              "status": {"enum": ["valid", "invalid_convergence"]},
+              "warnings": {"type": "array", "items": {"type": "string"}},
+              "metrics": {"type": ["object", "null"]}
+            }
+          }
+        }
+      }
+    }
+  }
+}
