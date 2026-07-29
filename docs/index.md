@@ -11,7 +11,8 @@ profile-likelihood sensitivity over a fixed cut-based baseline.
 |---|---|
 | Research question and protocol | frozen in Research Plan v1.0.0 |
 | Software and schemas | implementation under contract 2.1.0 |
-| Offline synthetic pipeline | implementation and verification target |
+| Jetson Docker environment | verified for ARM64, CUDA, and offline checks |
+| Offline synthetic pipeline | verified in the Jetson development container |
 | Full public-data catalog | planned; must be frozen through direct HTTPS |
 | Formal five-seed training | planned |
 | Expected physics result | not yet produced |

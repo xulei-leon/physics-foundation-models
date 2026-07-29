@@ -40,3 +40,5 @@ analysis.
 - Model input field lists are serialized and hashed.
 - Formal outputs are immutable and content-addressed.
 - Python 3.10--3.12 and no-network fixture tests are supported.
+- Formal XGBoost training uses the validated Jetson CUDA runtime with the
+  histogram tree method; portable tests explicitly use the CPU backend.

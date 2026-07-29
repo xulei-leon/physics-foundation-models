@@ -1,10 +1,18 @@
 # Analysis Run Guide
 
+Run these commands from `/workspace/particleML` inside the Jetson development
+container:
+
+```bash
+export PARTICLEML_RUNTIME=/workspace/runtime
+export PARTICLEML_PYTEST_CACHE="$PARTICLEML_RUNTIME/tmp/pytest-cache"
+```
+
 ## Offline software verification
 
-```powershell
+```bash
 particleml contracts validate
-pytest
+python -m pytest -q -o cache_dir="$PARTICLEML_PYTEST_CACHE"
 python scripts/validate_software_docs.py
 ```
 
@@ -13,37 +21,41 @@ produce or validate a physics result.
 
 ## Formal blinded sequence
 
+The committed analysis configuration uses CUDA-enabled XGBoost with
+`tree_method: hist` and `device: cuda` in the verified Jetson container. Run
+the formal sequence with that reviewed configuration exactly as written.
+
 All analysis inputs are obtained by direct HTTPS and verified against size,
 Adler-32, and SHA-256 before ROOT access. The catalog command resolves only the
 declared data, nominal simulation, and generator-variation allowlists.
 
-```powershell
-particleml catalog freeze `
-  --config configs/catalog-sources.yaml `
-  --cache cache/atlas `
-  --output artifacts/catalog.json
+```bash
+particleml catalog freeze \
+  --config configs/catalog-sources.yaml \
+  --cache "$PARTICLEML_RUNTIME/cache/atlas" \
+  --output "$PARTICLEML_RUNTIME/artifacts/catalog.json"
 
-particleml dataset build `
-  --config configs/analysis-v1.yaml `
-  --catalog artifacts/catalog.json `
-  --cache cache/atlas `
-  --output artifacts/dataset
+particleml dataset build \
+  --config configs/analysis-v1.yaml \
+  --catalog "$PARTICLEML_RUNTIME/artifacts/catalog.json" \
+  --cache "$PARTICLEML_RUNTIME/cache/atlas" \
+  --output "$PARTICLEML_RUNTIME/artifacts/dataset"
 
-particleml audit data `
-  --config configs/analysis-v1.yaml `
-  --dataset artifacts/dataset
+particleml audit data \
+  --config configs/analysis-v1.yaml \
+  --dataset "$PARTICLEML_RUNTIME/artifacts/dataset"
 
-particleml study tune `
-  --config configs/analysis-v1.yaml `
-  --dataset artifacts/dataset `
-  --output artifacts/tuning
+particleml study tune \
+  --config configs/analysis-v1.yaml \
+  --dataset "$PARTICLEML_RUNTIME/artifacts/dataset" \
+  --output "$PARTICLEML_RUNTIME/artifacts/tuning"
 
-particleml study run `
-  --config configs/analysis-v1.yaml `
-  --catalog artifacts/catalog.json `
-  --dataset artifacts/dataset `
-  --tuning artifacts/tuning `
-  --output artifacts/study
+particleml study run \
+  --config configs/analysis-v1.yaml \
+  --catalog "$PARTICLEML_RUNTIME/artifacts/catalog.json" \
+  --dataset "$PARTICLEML_RUNTIME/artifacts/dataset" \
+  --tuning "$PARTICLEML_RUNTIME/artifacts/tuning" \
+  --output "$PARTICLEML_RUNTIME/artifacts/study"
 ```
 
 `study tune` is the one bounded validation-only tuning pass at seed 42.
@@ -61,11 +73,11 @@ auditable. A failed gate prevents the next command.
 
 After inspecting the blinded study:
 
-```powershell
-particleml analysis freeze `
-  --config configs/analysis-v1.yaml `
-  --inputs artifacts `
-  --output artifacts/freeze.json
+```bash
+particleml analysis freeze \
+  --config configs/analysis-v1.yaml \
+  --inputs "$PARTICLEML_RUNTIME/artifacts" \
+  --output "$PARTICLEML_RUNTIME/artifacts/freeze.json"
 ```
 
 The freeze records raw values and thresholds for the five XGBoost seeds, the
@@ -78,11 +90,11 @@ no observed-data authorization.
 
 Authorization is a separate explicit human action after review of the freeze:
 
-```powershell
-particleml analysis authorize `
-  --freeze artifacts/freeze.json `
-  --approver "APPROVER NAME" `
-  --output artifacts/unblinding-authorization.json
+```bash
+particleml analysis authorize \
+  --freeze "$PARTICLEML_RUNTIME/artifacts/freeze.json" \
+  --approver "APPROVER NAME" \
+  --output "$PARTICLEML_RUNTIME/artifacts/unblinding-authorization.json"
 ```
 
 The authorization is self-hashed, bound to the freeze, and permits only the
@@ -91,16 +103,16 @@ pipeline never creates this file automatically.
 
 An authorized observed run is:
 
-```powershell
-particleml analysis observed `
-  --config configs/analysis-v1.yaml `
-  --freeze artifacts/freeze.json `
-  --authorization artifacts/unblinding-authorization.json `
-  --catalog artifacts/catalog.json `
-  --cache cache/atlas `
-  --dataset artifacts/dataset `
-  --study artifacts/study `
-  --output artifacts/observed `
+```bash
+particleml analysis observed \
+  --config configs/analysis-v1.yaml \
+  --freeze "$PARTICLEML_RUNTIME/artifacts/freeze.json" \
+  --authorization "$PARTICLEML_RUNTIME/artifacts/unblinding-authorization.json" \
+  --catalog "$PARTICLEML_RUNTIME/artifacts/catalog.json" \
+  --cache "$PARTICLEML_RUNTIME/cache/atlas" \
+  --dataset "$PARTICLEML_RUNTIME/artifacts/dataset" \
+  --study "$PARTICLEML_RUNTIME/artifacts/study" \
+  --output "$PARTICLEML_RUNTIME/artifacts/observed" \
   --unblind
 ```
 

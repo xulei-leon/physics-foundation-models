@@ -24,8 +24,10 @@ def test_validation_only_tuning_is_schema_valid_and_applicable() -> None:
     tuning["xgboost_learning_rate"] = [0.1]
     tuning["mlp_hidden_layer_sizes"] = [[1]]
     tuning["mlp_alpha"] = [0.0001]
+    xgboost = models["xgboost"]
     mlp = models["mlp"]
-    assert isinstance(mlp, dict)
+    assert isinstance(xgboost, dict) and isinstance(mlp, dict)
+    xgboost["device"] = "cpu"
     mlp["max_iter"] = 1000
     decision = tune_models(synthetic_event_frame(), config, "a" * 64)
     validate_document(decision, "tuning-decision")

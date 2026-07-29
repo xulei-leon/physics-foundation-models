@@ -25,6 +25,12 @@ expected profile-likelihood sensitivity over a cut-based baseline.
 ## Engineering rules
 
 - Python 3.10--3.12; no deep-learning framework dependency.
+- The verified primary environment is the Jetson ARM64 CUDA container described
+  in `docs/engineering/jetson-orin-nano-development-guide.md`.
+- Formal XGBoost runs use `tree_method: hist` and `device: cuda`; CPU overrides
+  are limited to portable tests that do not claim CUDA validation.
+- Use `sudo docker`, Buildx `--load`, `--runtime nvidia`, and the documented
+  host-network workaround on the verified Jetson.
 - Canonical data are event-level Parquet files.
 - Configurations reject unknown keys.
 - Formal outputs use partial paths, validation, hashing, atomic publication,

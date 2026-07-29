@@ -58,6 +58,8 @@ ANALYSIS_SPEC: dict[str, object] = {
         },
         "logistic": {"C": None, "max_iter": None},
         "xgboost": {
+            "device": None,
+            "tree_method": None,
             "n_estimators": None,
             "max_depth": None,
             "learning_rate": None,

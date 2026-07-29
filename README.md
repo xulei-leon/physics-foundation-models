@@ -16,6 +16,7 @@ precision-measurement claim.
 - Research plan: `v1.0.0`
 - Software and contract suite: `2.1.0`
 - Python package: `0.3.0`
+- Jetson Docker environment: verified on the documented ARM64/CUDA host
 - Observed signal window: **blinded**
 - Current migration status: implementation and offline fixture validation
 
@@ -28,34 +29,41 @@ the analysis freeze, authorization, and observed fits have not been produced.
 
 The declared development and debugging target is the **NVIDIA Jetson Orin Nano
 Super Developer Kit with 8 GB memory**. Development runs in an isolated ARM64
-Docker container on the JetPack host. Python 3.10, Node.js, pnpm, compilers,
-and project dependencies are installed in the image rather than in the native
-JetPack environment. The analysis uses CPU implementations of scikit-learn,
-XGBoost, and pyhf; CUDA, PyTorch, and other deep-learning frameworks are not
-required.
+Docker container on the JetPack host. The verified image is based on
+`nvcr.io/nvidia/pytorch:25.06-py3-igpu` and provides CUDA 12.9, Python 3.12,
+Node.js 20.19.5, pnpm 10.33.0, and XGBoost 3.3.0 compiled for SM 8.7. PyTorch
+is supplied by the base image but is not a particleML dependency.
 
-Use an NVMe SSD for the repository and the dedicated runtime cache and artifact
-directory. Docker image-layer placement remains managed by the existing
-JetPack Docker installation. Only the repository and the runtime directory are
-mounted into the container.
+The formal XGBoost configuration uses CUDA with the histogram tree method.
+Other model families remain on their native CPU implementations. The checkout
+and dedicated runtime directory are stored on NVMe and bind-mounted into the
+container; project-specific dependencies remain in Docker.
 
 ## Quick start
 
 ```bash
-export PARTICLEML_HOST_ROOT=/mnt/nvme/particleml
+export PARTICLEML_HOST_ROOT="$HOME/code/particleML"
 export PARTICLEML_DEV_IMAGE=particleml-jetson-dev:0.3.0
+export JETSON_PYTORCH_IMAGE=nvcr.io/nvidia/pytorch:25.06-py3-igpu
 
 test "$(id -u)" -gt 0
 test "$(id -g)" -gt 0
 
-cd "$PARTICLEML_HOST_ROOT/particleML"
-docker build \
+cd "$PARTICLEML_HOST_ROOT"
+sudo docker buildx build \
+  --load \
+  --network host \
+  --build-arg JETSON_PYTORCH_IMAGE="$JETSON_PYTORCH_IMAGE" \
   --build-arg HOST_UID="$(id -u)" \
   --build-arg HOST_GID="$(id -g)" \
   --file docker/jetson-dev/Dockerfile \
   --tag "$PARTICLEML_DEV_IMAGE" \
   .
 ```
+
+The verified board requires `sudo docker`, `--runtime nvidia` for GPU-enabled
+containers, and host networking for builds and the persistent development
+container.
 
 The complete image build, bind-mount, resource-limit, verification, debugging,
 and container lifecycle procedures are documented in the

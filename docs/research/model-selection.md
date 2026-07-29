@@ -26,6 +26,10 @@ Only validation events and seed 42 may inform hyperparameter choices. The
 parameters in `configs/analysis-v1.yaml` are then frozen for all five formal
 seeds. Test results must not trigger additional tuning.
 
+The formal XGBoost backend uses the validated Jetson CUDA build with the
+histogram tree method. The device is part of the hashed configuration; changing
+it requires a new reviewed configuration and new artifacts.
+
 ## Interpretation
 
 A raw AUC gain is insufficient. The primary model is scientifically usable

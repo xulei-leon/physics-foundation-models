@@ -28,11 +28,12 @@ provides:
 - fixed numerical thread limits suitable for an 8 GB board.
 
 The container uses the NVIDIA Container Toolkit and CUDA for GPU-enabled
-XGBoost debugging. The base image includes PyTorch, but particleML does not
-depend on it. The workflow does not require TensorFlow, `--privileged`, or the
-Docker socket. It uses host networking only for this board's documented Docker
-bridge workaround. The default particleML training configuration remains
-CPU-only unless an explicitly reviewed CUDA configuration is introduced.
+XGBoost development and formal training. The base image includes PyTorch, but
+particleML does not depend on it. The workflow does not require TensorFlow,
+`--privileged`, or the Docker socket. It uses host networking only for this
+board's documented Docker bridge workaround. The formal particleML
+configuration uses the validated CUDA backend with `tree_method: hist` and
+`device: cuda`.
 
 The repository and runtime directories are bind-mounted. Source changes,
 download caches, and immutable artifacts therefore survive container
@@ -433,8 +434,9 @@ PY
 XGBoost CUDA device: cuda:0
 ```
 
-Do not use this temporary CUDA setting for an analysis run without recording
-and reviewing the changed model configuration.
+This check matches the committed formal XGBoost device and tree method.
+Changing either setting requires a new reviewed configuration and new
+artifacts.
 
 ## 7. Verify the container environment
 
@@ -557,8 +559,7 @@ $ tegrastats
 Inspect container use from another host terminal:
 
 ```bash
-$ sudo docker run --rm --interactive --network none --runtime nvidia \
-  --entrypoint python3 nvcr.io/nvidia/pytorch:25.06-py3-igpu - <<'PY'
+$ sudo docker stats --no-stream "$PARTICLEML_DEV_CONTAINER"
 CONTAINER ID   NAME             CPU %     MEM USAGE / LIMIT   MEM %     NET I/O   BLOCK I/O        PIDS
 06d9f909e262   particleml-dev   0.00%     118.3MiB / 7GiB     1.65%     0B / 0B   158MB / 20.7MB   3
 ```

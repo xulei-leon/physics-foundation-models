@@ -55,6 +55,13 @@ Persisted predictions also retain dataset and sample-role metadata so nominal
 templates can exclude generator variations and generator-replacement
 diagnostics can replace exactly one declared nominal DSID.
 
+## XGBoost execution
+
+Formal XGBoost training uses `tree_method=hist` and `device=cuda` from the
+strict, hashed analysis configuration. The supported runtime is the validated
+SM 8.7 build in the Jetson development image. Changing the device or tree
+method requires a new reviewed configuration and new artifacts.
+
 ## DDT
 
 Within each final state, start from half-open 5 GeV mass bins over

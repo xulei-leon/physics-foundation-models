@@ -1,11 +1,21 @@
 # Data Access and Dataset Build
 
+Run these commands from `/workspace/particleML` inside the Jetson development
+container. Keep downloaded inputs and published artifacts in the bind-mounted
+runtime directory:
+
+```bash
+export PARTICLEML_RUNTIME=/workspace/runtime
+```
+
 ## Catalog
 
 Generate record metadata and file entries only through direct HTTPS:
 
-```powershell
-particleml catalog validate --config configs/catalog-sources.yaml --catalog path/to/catalog.json
+```bash
+particleml catalog validate \
+  --config configs/catalog-sources.yaml \
+  --catalog "$PARTICLEML_RUNTIME/artifacts/catalog.json"
 ```
 
 The formal catalog stores an HTTPS URL, byte size, and SHA-256 checksum for
@@ -18,11 +28,12 @@ contract.
 
 ## Canonical build
 
-```powershell
-particleml dataset build `
-  --config configs/analysis-v1.yaml `
-  --catalog path/to/catalog.json `
-  --output artifacts/dataset-v1
+```bash
+particleml dataset build \
+  --config configs/analysis-v1.yaml \
+  --catalog "$PARTICLEML_RUNTIME/artifacts/catalog.json" \
+  --cache "$PARTICLEML_RUNTIME/cache/atlas" \
+  --output "$PARTICLEML_RUNTIME/artifacts/dataset-v1"
 ```
 
 The builder streams ROOT chunks, validates required branches, converts MeV to
@@ -31,8 +42,10 @@ publishes Parquet partitions plus a dataset manifest.
 
 ## Data audit
 
-```powershell
-particleml audit data --dataset artifacts/dataset-v1
+```bash
+particleml audit data \
+  --config configs/analysis-v1.yaml \
+  --dataset "$PARTICLEML_RUNTIME/artifacts/dataset-v1"
 ```
 
 The audit checks checksum lineage, event uniqueness, unit ranges, cutflow

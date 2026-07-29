@@ -129,9 +129,17 @@ def build_model(
             ),
         )
     params = _mapping(models["xgboost"], "models.xgboost")
+    device = str(params["device"])
+    tree_method = str(params["tree_method"])
+    if device not in {"cpu", "cuda"}:
+        raise ContractError("MODEL_CONFIG", f"unsupported XGBoost device: {device}")
+    if tree_method != "hist":
+        raise ContractError("MODEL_CONFIG", f"unsupported XGBoost tree method: {tree_method}")
     return cast(
         Classifier,
         XGBClassifier(
+            device=device,
+            tree_method=tree_method,
             n_estimators=int(params["n_estimators"]),
             max_depth=int(params["max_depth"]),
             learning_rate=float(params["learning_rate"]),

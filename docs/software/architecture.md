@@ -32,7 +32,7 @@ flowchart LR
 | `weights` | signed yield weights and absolute class-normalized train weights |
 | `splits` | deterministic identity and per-dataset hash buckets |
 | `features` | frozen dimensionless features and forbidden-field enforcement |
-| `models` | four model families, five seeds, prediction alignment |
+| `models` | four model families, configured CUDA XGBoost, five seeds, prediction alignment |
 | `tuning` | bounded validation-only candidate evaluation and decision |
 | `decorrelation` | conditional CDF, adaptive bins, sculpting gates |
 | `inference` | templates, non-positive-bin merging, pyhf workspace and fit |

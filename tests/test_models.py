@@ -6,10 +6,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from xgboost import XGBClassifier
 
 from particleml.config import load_config
 from particleml.contracts import ContractError
-from particleml.models import FORMAL_SEEDS, ensemble_predictions, train_seeded_predictions
+from particleml.models import (
+    FORMAL_SEEDS,
+    build_model,
+    ensemble_predictions,
+    train_seeded_predictions,
+)
 
 from .helpers import synthetic_event_frame
 
@@ -23,10 +29,27 @@ def _test_config() -> dict[str, object]:
     xgboost = models["xgboost"]
     mlp = models["mlp"]
     assert isinstance(xgboost, dict) and isinstance(mlp, dict)
+    xgboost["device"] = "cpu"
     xgboost["n_estimators"] = 10
     mlp["hidden_layer_sizes"] = [8]
     mlp["max_iter"] = 60
     return config
+
+
+def test_xgboost_runtime_comes_from_frozen_config() -> None:
+    config = deepcopy(load_config(ROOT / "configs" / "analysis-v1.yaml", "analysis"))
+    model = build_model("xgboost", FORMAL_SEEDS[0], config)
+    assert isinstance(model, XGBClassifier)
+    assert model.get_params()["device"] == "cuda"
+    assert model.get_params()["tree_method"] == "hist"
+
+    models = config["models"]
+    assert isinstance(models, dict)
+    xgboost = models["xgboost"]
+    assert isinstance(xgboost, dict)
+    xgboost["device"] = "tpu"
+    with pytest.raises(ContractError, match="unsupported XGBoost device"):
+        build_model("xgboost", FORMAL_SEEDS[0], config)
 
 
 @pytest.mark.parametrize("model_name", ["cut_based", "logistic", "xgboost", "mlp"])
