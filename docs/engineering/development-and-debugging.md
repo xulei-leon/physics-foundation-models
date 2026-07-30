@@ -37,10 +37,18 @@ export PARTICLEML_PYTEST_CACHE=/workspace/runtime/tmp/pytest-cache
 export RUFF_CACHE_DIR=/workspace/runtime/tmp/ruff-cache
 export PARTICLEML_MYPY_CACHE=/workspace/runtime/tmp/mypy-cache
 
-python -m ruff check src/particleml scripts tests
-python -m mypy --cache-dir="$PARTICLEML_MYPY_CACHE" src/particleml
-python -m pytest -q -o cache_dir="$PARTICLEML_PYTEST_CACHE"
-python scripts/validate_software_docs.py
+ubuntu@leon-orin:/workspace/particleML$ python -m ruff check src/particleml scripts tests
+All checks passed!
+
+ubuntu@leon-orin:/workspace/particleML$ python -m mypy --cache-dir="$PARTICLEML_MYPY_CACHE" src/particleml
+Success: no issues found in 22 source files
+
+ubuntu@leon-orin:/workspace/particleML$ python -m pytest -q -o cache_dir="$PARTICLEML_PYTEST_CACHE"
+76 passed, 15 warnings in 20.23s
+
+ubuntu@leon-orin:/workspace/particleML$ python scripts/validate_software_docs.py
+documentation validation passed (7 checks)
+
 pnpm test
 pnpm docs:build
 ```

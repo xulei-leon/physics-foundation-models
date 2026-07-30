@@ -11,9 +11,24 @@ export PARTICLEML_PYTEST_CACHE="$PARTICLEML_RUNTIME/tmp/pytest-cache"
 ## Offline software verification
 
 ```bash
-particleml contracts validate
-python -m pytest -q -o cache_dir="$PARTICLEML_PYTEST_CACHE"
-python scripts/validate_software_docs.py
+ubuntu@leon-orin:/workspace/particleML$ particleml contracts validate
+dataset-catalog
+dataset-manifest
+split-manifest
+run-record
+prediction-metadata
+model-metadata
+tuning-decision
+study-result
+analysis-freeze
+unblinding-authorization
+fit-result
+
+ubuntu@leon-orin:/workspace/particleML$ python -m pytest -q -o cache_dir="$PARTICLEML_PYTEST_CACHE"
+76 passed, 15 warnings in 20.35s
+
+ubuntu@leon-orin:/workspace/particleML$ python scripts/validate_software_docs.py
+documentation validation passed (7 checks)
 ```
 
 These checks verify software behavior with synthetic fixtures. They do not
