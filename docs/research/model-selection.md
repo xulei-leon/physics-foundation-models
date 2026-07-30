@@ -20,11 +20,20 @@ All learned models use the same split, feature contract, training weights,
 seeds, and evaluation events. Raw scores are used only for classification
 metrics. The statistical fit consumes DDT categories.
 
+These are fixed components of one analysis, not independently configurable
+pipelines. XGBoost owns only model construction and scoring. Catalog,
+ingestion, selection, weights, features, DDT, templates, fitting, artifact
+publication, and blinding remain shared.
+
 ## Frozen tuning
 
 Only validation events and seed 42 may inform hyperparameter choices. The
 parameters in `configs/analysis-v1.yaml` are then frozen for all five formal
 seeds. Test results must not trigger additional tuning.
+
+XGBoost fixes `min_child_weight` at `0.01` because the absolute training
+weights are normalized to `0.5` per class; the library default of `1.0` would
+prevent tree splits under that weight convention.
 
 The formal XGBoost backend uses the validated Jetson CUDA build with the
 histogram tree method. The device is part of the hashed configuration; changing
@@ -36,3 +45,7 @@ A raw AUC gain is insufficient. The primary model is scientifically usable
 only if it improves expected sensitivity after DDT and passes all sculpting
 gates. If XGBoost fails a gate, v1 reports that failure; it does not silently
 substitute a different model.
+
+Formal freeze readiness depends on all five XGBoost seeds, the XGBoost
+ensemble, and the cut-based ensemble. Logistic Regression and MLP remain
+diagnostic controls and cannot authorize observed access.

@@ -27,6 +27,7 @@ profile-likelihood sensitivity over a fixed cut-based baseline.
 - [Software architecture](software/architecture.md)
 - [Jetson Orin Nano development guide](engineering/jetson-orin-nano-development-guide.md)
 - [Analysis run guide](engineering/analysis-run-guide.md)
+- [Offline synthetic demo](engineering/offline-demo-guide.md)
 - [Migration plan](plans/2026-07-25-atlas-h4l-v1-migration-plan.md)
 
 The code and tests implement analysis mechanics. They do not turn planned

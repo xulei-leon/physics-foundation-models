@@ -295,5 +295,5 @@ def run_observed_pipeline(
             "authorization": authorization_sha256,
         },
         config_hash,
-        "particleml-0.3.0",
+        "particleml-0.4.0",
     )

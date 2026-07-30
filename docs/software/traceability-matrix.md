@@ -24,6 +24,7 @@
 | ART-001 | completion record contract | `artifacts.py` | `test_artifacts.py` |
 | CLI-001 | command specification | `cli.py` | `test_cli.py` |
 | DOC-001 | documentation contract | `validate_software_docs.py` | CI documentation job |
+| DEMO-001 | demo-summary schema | `demo.py`, `cli.py` | `test_demo.py`, `test_cli.py` |
 
 Rows for formal science results remain absent until retained artifacts exist.
 Implementation tests establish behavior, not physics performance.

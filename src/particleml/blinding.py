@@ -17,6 +17,7 @@ from .contracts import (
     sha256_document,
     validate_document,
 )
+from .models import BASELINE_MODEL, FORMAL_SEEDS, PRIMARY_MODEL
 
 ARTIFACT_FIELDS = (
     "config",
@@ -32,15 +33,11 @@ ARTIFACT_FIELDS = (
     "software",
 )
 REQUIRED_GATE_SETS = (
-    "xgboost-seed-17",
-    "xgboost-seed-42",
-    "xgboost-seed-314",
-    "xgboost-seed-2026",
-    "xgboost-seed-2718",
-    "xgboost-ensemble",
-    "cut_based-ensemble",
+    *(f"{PRIMARY_MODEL}-seed-{seed}" for seed in FORMAL_SEEDS),
+    f"{PRIMARY_MODEL}-ensemble",
+    f"{BASELINE_MODEL}-ensemble",
 )
-ALLOWED_WORKSPACES = ("xgboost-ensemble", "cut_based-ensemble")
+ALLOWED_WORKSPACES = (f"{PRIMARY_MODEL}-ensemble", f"{BASELINE_MODEL}-ensemble")
 AUTHORIZATION_STATEMENT = (
     "I authorize the frozen particleML analysis to process the blinded 120--130 GeV "
     "data window only for the two declared observed workspaces."

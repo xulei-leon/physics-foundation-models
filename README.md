@@ -15,7 +15,7 @@ precision-measurement claim.
 
 - Research plan: `v1.0.0`
 - Software and contract suite: `2.1.0`
-- Python package: `0.3.0`
+- Python package: `0.4.0`
 - Jetson Docker environment: verified on the documented ARM64/CUDA host
 - Observed signal window: **blinded**
 - Current migration status: implementation and offline fixture validation
@@ -39,11 +39,15 @@ Other model families remain on their native CPU implementations. The checkout
 and dedicated runtime directory are stored on NVMe and bind-mounted into the
 container; project-specific dependencies remain in Docker.
 
+XGBoost is the primary model component, not a separate analysis stack.
+Cut-based, Logistic Regression, XGBoost, and MLP paths share the same data,
+feature, weighting, DDT, and expected-fit contracts.
+
 ## Quick start
 
 ```bash
 export PARTICLEML_HOST_ROOT="$HOME/code/particleML"
-export PARTICLEML_DEV_IMAGE=particleml-jetson-dev:0.3.0
+export PARTICLEML_DEV_IMAGE=particleml-jetson-dev:0.4.0
 export JETSON_PYTORCH_IMAGE=nvcr.io/nvidia/pytorch:25.06-py3-igpu
 
 test "$(id -u)" -gt 0
@@ -65,11 +69,20 @@ The verified board requires `sudo docker`, `--runtime nvidia` for GPU-enabled
 containers, and host networking for builds and the persistent development
 container.
 
+The deterministic offline demo uses synthetic ROOT inputs and the portable CPU
+backend:
+
+```bash
+particleml demo run --output "$PARTICLEML_RUNTIME/artifacts/synthetic-demo"
+```
+
 The complete image build, bind-mount, resource-limit, verification, debugging,
 and container lifecycle procedures are documented in the
 [Jetson Orin Nano development guide](docs/engineering/jetson-orin-nano-development-guide.md).
 The formal command sequence and configuration contracts are documented in the
 [analysis run guide](docs/engineering/analysis-run-guide.md). The
+[offline demo guide](docs/engineering/offline-demo-guide.md) documents the
+non-formal, no-network engineering check. The
 [research plan](docs/research/research-plan.md) separates fixed methodology
 from results that have not yet been produced.
 

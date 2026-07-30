@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from particleml.evaluation import weighted_metrics
@@ -13,3 +15,4 @@ def test_weighted_metrics_for_perfect_classifier() -> None:
     )
     assert metrics["weighted_roc_auc"] == 1.0
     assert metrics["weighted_pr_auc"] == 1.0
+    assert math.isfinite(metrics["background_rejection_at_50_signal_efficiency"])

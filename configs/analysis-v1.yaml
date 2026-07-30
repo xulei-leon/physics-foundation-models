@@ -49,6 +49,7 @@ models:
     subsample: 0.8
     colsample_bytree: 0.8
     reg_lambda: 1.0
+    min_child_weight: 0.01
   mlp:
     hidden_layer_sizes: [64, 32]
     alpha: 0.0001

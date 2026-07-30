@@ -67,6 +67,7 @@ def test_public_command_tree_is_registered() -> None:
         ["fit", "expected", "--predictions", "ddt", "--output", "fit"],
         ["fit", "observed", "--freeze", "freeze.json", "--unblind"],
         ["report", "build", "--inputs", "artifacts", "--output", "report"],
+        ["demo", "run", "--output", "demo"],
         ["contracts", "validate"],
     ]
     for example in examples:

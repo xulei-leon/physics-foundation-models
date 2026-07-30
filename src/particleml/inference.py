@@ -325,20 +325,23 @@ def fit_workspace(
         raise ContractError("FIT_MODE", f"unsupported fit mode: {mode}")
     workspace = pyhf.Workspace(dict(workspace_spec))
     model = workspace.model()
-    if mode == "expected":
-        data, _ = _asimov_data(model, 1.0)
-    else:
-        if freeze_sha256 is None:
-            raise ContractError("FIT_FREEZE", "observed fit requires a freeze hash")
-        data = np.asarray(workspace.data(model), dtype=np.float64)
-    fitted, minimum = pyhf.infer.mle.fit(data, model, return_fitted_val=True)
-    parameters = np.asarray(fitted, dtype=np.float64)
-    mu_hat = float(parameters[model.config.poi_index])
-    minimum_nll = float(np.asarray(minimum).reshape(-1)[0])
-    sigma = _profile_sigma(mu_hat, minimum_nll, data, model)
-    p_value = float(
-        np.asarray(pyhf.infer.hypotest(0.0, data, model, test_stat="q0")).reshape(-1)[0]
-    )
+    try:
+        if mode == "expected":
+            data, _ = _asimov_data(model, 1.0)
+        else:
+            if freeze_sha256 is None:
+                raise ContractError("FIT_FREEZE", "observed fit requires a freeze hash")
+            data = np.asarray(workspace.data(model), dtype=np.float64)
+        fitted, minimum = pyhf.infer.mle.fit(data, model, return_fitted_val=True)
+        parameters = np.asarray(fitted, dtype=np.float64)
+        mu_hat = float(parameters[model.config.poi_index])
+        minimum_nll = float(np.asarray(minimum).reshape(-1)[0])
+        sigma = _profile_sigma(mu_hat, minimum_nll, data, model)
+        p_value = float(
+            np.asarray(pyhf.infer.hypotest(0.0, data, model, test_stat="q0")).reshape(-1)[0]
+        )
+    except pyhf.exceptions.FailedMinimization as exc:
+        raise ContractError("FIT_MINIMIZATION", str(exc)) from exc
     significance = float(norm.isf(max(p_value, np.finfo(float).tiny)))
     result: dict[str, object] = {
         "schema_version": "2.1.0",

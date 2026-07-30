@@ -24,6 +24,7 @@ SCHEMA_NAMES = (
     "analysis-freeze",
     "unblinding-authorization",
     "fit-result",
+    "demo-summary",
 )
 
 FORBIDDEN_EXACT_FIELDS = frozenset(

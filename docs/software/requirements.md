@@ -28,6 +28,7 @@ analysis.
 | ART-001 | Publish formal outputs atomically with completion records | tested |
 | CLI-001 | Expose the breaking v2.1 command surface | tested |
 | DOC-001 | Validate documentation links, versions, statuses, and stale terms | tested |
+| DEMO-001 | Publish a no-network synthetic four-model demo that is ineligible for freeze | tested |
 | SCI-001 | Produce formal five-seed and expected-fit results | planned |
 | SCI-002 | Create an analysis freeze after all real sideband gates pass | planned |
 | SCI-003 | Perform an authorized observed fit | planned |

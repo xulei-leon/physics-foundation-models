@@ -22,7 +22,17 @@ from .contracts import ContractError, canonical_json_bytes, sha256_file
 from .features import PRIMARY_FEATURES, FeatureMatrix, build_feature_matrix
 
 FORMAL_SEEDS = (17, 42, 314, 2026, 2718)
-MODEL_NAMES = ("cut_based", "logistic", "xgboost", "mlp")
+BASELINE_MODEL = "cut_based"
+PRIMARY_MODEL = "xgboost"
+CONTROL_MODELS = ("logistic", "mlp")
+TUNED_MODELS = ("logistic", PRIMARY_MODEL, "mlp")
+MODEL_NAMES = (BASELINE_MODEL, *TUNED_MODELS)
+MODEL_ROLES = {
+    BASELINE_MODEL: "baseline",
+    "logistic": "linear_control",
+    PRIMARY_MODEL: "primary",
+    "mlp": "nonlinear_control",
+}
 
 
 class Classifier(Protocol):
@@ -79,7 +89,7 @@ def build_model(
 
     if name not in MODEL_NAMES:
         raise ContractError("MODEL_NAME", f"unknown model: {name}")
-    if name == "cut_based":
+    if name == BASELINE_MODEL:
         return CutBasedClassifier(fields)
     models = _mapping(config["models"], "models")
     if name == "logistic":
@@ -146,6 +156,7 @@ def build_model(
             subsample=float(params["subsample"]),
             colsample_bytree=float(params["colsample_bytree"]),
             reg_lambda=float(params["reg_lambda"]),
+            min_child_weight=float(params["min_child_weight"]),
             random_state=seed,
             n_jobs=1,
             objective="binary:logistic",
@@ -287,7 +298,7 @@ def save_seeded_models(
     records: list[dict[str, object]] = []
     for seed in FORMAL_SEEDS:
         model = models[seed]
-        if model_name == "cut_based":
+        if model_name == BASELINE_MODEL:
             path = directory / f"model-seed-{seed}.json"
             path.write_bytes(
                 canonical_json_bytes(
@@ -299,7 +310,7 @@ def save_seeded_models(
                 )
             )
             format_name = "particleml-cut-v1"
-        elif model_name == "xgboost":
+        elif model_name == PRIMARY_MODEL:
             path = directory / f"model-seed-{seed}.json"
             cast(XGBClassifier, model).save_model(path)
             format_name = "xgboost-json"
@@ -339,7 +350,7 @@ def save_seeded_models(
 def load_model(path: Path, model_name: str, fields: Sequence[str]) -> Classifier:
     """Load one frozen model from its declared family-specific format."""
 
-    if model_name == "cut_based":
+    if model_name == BASELINE_MODEL:
         try:
             document = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
@@ -347,7 +358,7 @@ def load_model(path: Path, model_name: str, fields: Sequence[str]) -> Classifier
         if document.get("model_name") != "cut_based" or document.get("fields") != list(fields):
             raise ContractError("MODEL_LOAD", "cut-based model metadata do not match")
         return CutBasedClassifier(fields)
-    if model_name == "xgboost":
+    if model_name == PRIMARY_MODEL:
         model = XGBClassifier()
         model.load_model(path)
         return cast(Classifier, model)

@@ -16,6 +16,7 @@ import pandas as pd  # type: ignore[import-untyped]
 
 from .artifacts import Artifact, IntegrityError, publish_artifact, verify_artifact
 from .blinding import (
+    ALLOWED_WORKSPACES,
     authorize_observed_fit,
     create_freeze_document,
     create_unblinding_authorization,
@@ -40,11 +41,12 @@ from .contracts import (
 )
 from .dataset import audit_frame, load_dataset
 from .decorrelation import DDTCalibrator, ddt_category, evaluate_decorrelation_gates
+from .demo import run_offline_demo
 from .evaluation import weighted_metrics
 from .features import PRIMARY_FEATURES
 from .inference import build_templates, build_workspace, fit_workspace, spurious_signal_sigma
 from .ingestion import SourceDescriptor, ingest_sources, publish_canonical_dataset
-from .models import MODEL_NAMES, save_seeded_models, train_seeded_models
+from .models import MODEL_NAMES, PRIMARY_MODEL, save_seeded_models, train_seeded_models
 from .observed import run_observed_pipeline
 from .physics import PhysicsError, selection_from_config
 from .reporting import build_blinded_report
@@ -208,7 +210,7 @@ def _training_writer(
             "config_sha256": config_hash,
             "input_artifacts": {"dataset": dataset_artifact.sha256},
             "software": {
-                "particleml_version": "0.3.0",
+                "particleml_version": "0.4.0",
                 "python_version": sys.version.split()[0],
                 "git_commit": _git_commit(),
             },
@@ -270,7 +272,7 @@ def _training_writer(
         validator,
         {"dataset": dataset_artifact.sha256},
         config_hash,
-        "particleml-0.3.0",
+        "particleml-0.4.0",
     )
 
 
@@ -311,7 +313,7 @@ def _study_tune(args: argparse.Namespace) -> None:
         validator,
         {"dataset": dataset_artifact.sha256},
         config_hash,
-        "particleml-0.3.0",
+        "particleml-0.4.0",
     )
 
 
@@ -358,7 +360,7 @@ def _study_run(args: argparse.Namespace) -> None:
             "catalog": catalog_hash,
         },
         config_hash,
-        "particleml-0.3.0",
+        "particleml-0.4.0",
     )
 
 
@@ -407,7 +409,7 @@ def _decorrelate(args: argparse.Namespace) -> None:
         validator,
         {"predictions": prediction_artifact.sha256},
         config_hash,
-        "particleml-0.3.0",
+        "particleml-0.4.0",
     )
 
 
@@ -477,7 +479,7 @@ def _evaluate(args: argparse.Namespace) -> None:
         validator,
         {"predictions": prediction_artifact.sha256},
         config_hash,
-        "particleml-0.3.0",
+        "particleml-0.4.0",
     )
 
 
@@ -536,13 +538,15 @@ def _fit_expected(args: argparse.Namespace) -> None:
         validator,
         {"predictions": prediction_artifact.sha256},
         config_hash,
-        "particleml-0.3.0",
+        "particleml-0.4.0",
     )
 
 
 def _analysis_freeze(args: argparse.Namespace) -> None:
     config = load_config(args.config, "analysis")
     root = args.inputs
+    if (root / "demo-summary.json").is_file():
+        raise ContractError("FREEZE_DEMO", "synthetic demo artifacts cannot enter a freeze")
     study = verify_artifact(root / "study")
     freeze_inputs = _json(study.path / "freeze-inputs.json")
     artifacts = cast(Mapping[str, str], freeze_inputs["artifacts"])
@@ -571,7 +575,7 @@ def _analysis_observed(args: argparse.Namespace) -> None:
         args.freeze,
         args.authorization,
         args.unblind,
-        "xgboost-ensemble",
+        f"{PRIMARY_MODEL}-ensemble",
     )
     artifacts = cast(Mapping[str, str], freeze["artifacts"])
     if artifacts["config"] != config_sha256(config):
@@ -643,6 +647,11 @@ def _contracts_validate(_: argparse.Namespace) -> None:
     print("\n".join(validated))
 
 
+def _demo_run(args: argparse.Namespace) -> None:
+    artifact = run_offline_demo(args.output)
+    print(artifact.sha256)
+
+
 def _add_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", type=Path, default=Path("configs/analysis-v1.yaml"))
 
@@ -690,7 +699,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_config(run_train)
     run_train.add_argument("--dataset", type=Path, required=True)
     run_train.add_argument("--output", type=Path, required=True)
-    run_train.add_argument("--model", choices=MODEL_NAMES, default="xgboost")
+    run_train.add_argument("--model", choices=MODEL_NAMES, default=PRIMARY_MODEL)
     run_train.set_defaults(handler=_run_train)
 
     study = top.add_parser("study").add_subparsers(dest="action", required=True)
@@ -760,7 +769,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_config(observed)
     observed.add_argument("--freeze", type=Path)
     observed.add_argument("--authorization", type=Path)
-    observed.add_argument("--workspace-name", choices=("xgboost-ensemble", "cut_based-ensemble"))
+    observed.add_argument("--workspace-name", choices=ALLOWED_WORKSPACES)
     observed.add_argument("--unblind", action="store_true")
     observed.add_argument("--workspace", type=Path)
     observed.add_argument("--output", type=Path)
@@ -772,6 +781,11 @@ def build_parser() -> argparse.ArgumentParser:
     report_build.add_argument("--inputs", type=Path, required=True)
     report_build.add_argument("--output", type=Path, required=True)
     report_build.set_defaults(handler=_report_build)
+
+    demo = top.add_parser("demo").add_subparsers(dest="action", required=True)
+    demo_run = demo.add_parser("run")
+    demo_run.add_argument("--output", type=Path, required=True)
+    demo_run.set_defaults(handler=_demo_run)
 
     contracts = top.add_parser("contracts").add_subparsers(dest="action", required=True)
     contracts_validate = contracts.add_parser("validate")

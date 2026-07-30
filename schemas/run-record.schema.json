@@ -34,7 +34,7 @@
       "additionalProperties": false,
       "required": ["particleml_version", "python_version", "git_commit"],
       "properties": {
-        "particleml_version": {"const": "0.3.0"},
+        "particleml_version": {"const": "0.4.0"},
         "python_version": {"type": "string"},
         "git_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"}
       }

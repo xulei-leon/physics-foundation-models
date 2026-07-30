@@ -36,6 +36,7 @@ REQUIRED_FILES = (
     DOCS / "engineering" / "jetson-orin-nano-development-guide.md",
     DOCS / "engineering" / "data-access-guide.md",
     DOCS / "engineering" / "analysis-run-guide.md",
+    DOCS / "engineering" / "offline-demo-guide.md",
     DOCS / "references" / "h4l-literature-dossier.md",
 )
 SCHEMAS = (
@@ -50,6 +51,7 @@ SCHEMAS = (
     "analysis-freeze",
     "unblinding-authorization",
     "fit-result",
+    "demo-summary",
 )
 STALE_TERMS = ("C" + "MS", "Jet" + "Class", "Omni" + "Learned", "top-" + "tagging")
 TEXT_SUFFIXES = {".md", ".py", ".json", ".yaml", ".yml", ".toml", ".mjs"}
@@ -75,7 +77,7 @@ def validate_versions_and_status() -> None:
     for token, source in (
         ("Research Plan v1.0.0", research),
         ("Software Requirements 2.1.0", requirements),
-        ('version = "0.3.0"', pyproject),
+        ('version = "0.4.0"', pyproject),
         ("blinded", index.lower()),
         ("planned", requirements),
     ):

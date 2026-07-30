@@ -16,7 +16,7 @@ from .config import config_sha256
 from .contracts import ContractError
 from .evaluation import weighted_metrics
 from .features import PRIMARY_FEATURES, build_feature_matrix
-from .models import _fit_with_weights, build_model
+from .models import TUNED_MODELS, _fit_with_weights, build_model
 
 
 def _mapping(value: object, label: str) -> Mapping[str, Any]:
@@ -99,7 +99,7 @@ def tune_models(
     seed = int(_mapping(config["models"], "models")["tuning_seed"])
     tolerance = float(tuning_config["tie_tolerance"])
     decisions: dict[str, Any] = {}
-    for model_name in ("logistic", "xgboost", "mlp"):
+    for model_name in TUNED_MODELS:
         evaluations: list[dict[str, Any]] = []
         best_index: int | None = None
         best_roc = -np.inf
@@ -186,7 +186,7 @@ def apply_tuning_decision(
     effective = deepcopy(dict(config))
     models = cast(dict[str, Any], effective["models"])
     decisions = _mapping(decision["models"], "tuning.models")
-    for model_name in ("logistic", "xgboost", "mlp"):
+    for model_name in TUNED_MODELS:
         selected = _mapping(
             _mapping(decisions[model_name], f"tuning.models.{model_name}")[
                 "selected_parameters"

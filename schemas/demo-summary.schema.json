@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://particleml.local/schemas/2.1.0/demo-summary.schema.json",
+  "title": "particleML synthetic offline demo summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mode",
+    "formal_eligible",
+    "blinded",
+    "status",
+    "study_status",
+    "blocking_reasons",
+    "config_sha256",
+    "catalog_sha256",
+    "dataset_sha256",
+    "tuning_sha256",
+    "data_summary",
+    "runtime",
+    "models",
+    "primary_comparison",
+    "outputs"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.1.0"},
+    "mode": {"const": "synthetic-demo"},
+    "formal_eligible": {"const": false},
+    "blinded": {"const": true},
+    "status": {"const": "completed"},
+    "study_status": {"enum": ["completed", "blocked"]},
+    "blocking_reasons": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "config_sha256": {"$ref": "#/$defs/sha256"},
+    "catalog_sha256": {"$ref": "#/$defs/sha256"},
+    "dataset_sha256": {"$ref": "#/$defs/sha256"},
+    "tuning_sha256": {"$ref": "#/$defs/sha256"},
+    "data_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rows",
+        "data_rows",
+        "simulation_rows",
+        "variation_rows",
+        "datasets",
+        "channels",
+        "splits",
+        "data_target_rows",
+        "data_training_weight_rows",
+        "data_signal_window_rows"
+      ],
+      "properties": {
+        "rows": {"type": "integer", "minimum": 1},
+        "data_rows": {"type": "integer", "minimum": 1},
+        "simulation_rows": {"type": "integer", "minimum": 1},
+        "variation_rows": {"const": 0},
+        "datasets": {"type": "integer", "minimum": 12},
+        "data_target_rows": {"const": 0},
+        "data_training_weight_rows": {"const": 0},
+        "data_signal_window_rows": {"const": 0},
+        "channels": {
+          "type": "array",
+          "items": {"enum": ["4e", "4mu", "2e2mu"]},
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true
+        },
+        "splits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["calibration", "data", "test", "train", "validation"],
+          "properties": {
+            "calibration": {"type": "integer", "minimum": 1},
+            "data": {"type": "integer", "minimum": 1},
+            "test": {"type": "integer", "minimum": 1},
+            "train": {"type": "integer", "minimum": 1},
+            "validation": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "particleml_version",
+        "python_version",
+        "scikit_learn_version",
+        "xgboost_version",
+        "xgboost_device",
+        "tree_method"
+      ],
+      "properties": {
+        "particleml_version": {"const": "0.4.0"},
+        "python_version": {"type": "string", "minLength": 1},
+        "scikit_learn_version": {"type": "string", "minLength": 1},
+        "xgboost_version": {"type": "string", "minLength": 1},
+        "xgboost_device": {"const": "cpu"},
+        "tree_method": {"const": "hist"}
+      }
+    },
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cut_based", "logistic", "xgboost", "mlp"],
+      "properties": {
+        "cut_based": {
+          "allOf": [
+            {"$ref": "#/$defs/model"},
+            {"properties": {"role": {"const": "baseline"}}}
+          ]
+        },
+        "logistic": {
+          "allOf": [
+            {"$ref": "#/$defs/model"},
+            {"properties": {"role": {"const": "linear_control"}}}
+          ]
+        },
+        "xgboost": {
+          "allOf": [
+            {"$ref": "#/$defs/model"},
+            {"properties": {"role": {"const": "primary"}}}
+          ]
+        },
+        "mlp": {
+          "allOf": [
+            {"$ref": "#/$defs/model"},
+            {"properties": {"role": {"const": "nonlinear_control"}}}
+          ]
+        }
+      }
+    },
+    "primary_comparison": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "xgboost_expected_significance",
+            "cut_based_expected_significance",
+            "delta"
+          ],
+          "properties": {
+            "xgboost_expected_significance": {"type": "number"},
+            "cut_based_expected_significance": {"type": "number"},
+            "delta": {"type": "number"}
+          }
+        }
+      ]
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "report.md",
+        "roc-comparison.png",
+        "expected-significance-comparison.png",
+        "xgboost-score-distribution.png",
+        "xgboost-score-vs-m4l.png",
+        "xgboost-m4l-by-ddt-category.png"
+      ],
+      "properties": {
+        "report.md": {"$ref": "#/$defs/sha256"},
+        "roc-comparison.png": {"$ref": "#/$defs/sha256"},
+        "expected-significance-comparison.png": {"$ref": "#/$defs/sha256"},
+        "xgboost-score-distribution.png": {"$ref": "#/$defs/sha256"},
+        "xgboost-score-vs-m4l.png": {"$ref": "#/$defs/sha256"},
+        "xgboost-m4l-by-ddt-category.png": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "seeds", "metrics", "expected_significance", "gates"],
+      "properties": {
+        "role": {
+          "enum": ["baseline", "linear_control", "primary", "nonlinear_control"]
+        },
+        "seeds": {
+          "type": "array",
+          "prefixItems": [
+            {"const": 17},
+            {"const": 42},
+            {"const": 314},
+            {"const": 2026},
+            {"const": 2718}
+          ],
+          "items": false,
+          "minItems": 5,
+          "maxItems": 5
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "weighted_roc_auc",
+            "weighted_pr_auc",
+            "background_rejection_at_50_signal_efficiency"
+          ],
+          "properties": {
+            "weighted_roc_auc": {"type": "number"},
+            "weighted_pr_auc": {"type": "number"},
+            "background_rejection_at_50_signal_efficiency": {"type": "number"}
+          }
+        },
+        "expected_significance": {"type": ["number", "null"]},
+        "gates": {"$ref": "#/$defs/gateSet"}
+      }
+    },
+    "correlationGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "maximum_absolute", "passed"],
+      "properties": {
+        "value": {"type": ["number", "null"]},
+        "maximum_absolute": {"type": "number", "exclusiveMinimum": 0},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "acceptanceGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["values", "minimum", "maximum", "passed"],
+      "properties": {
+        "values": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "minimum": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximum": {"type": "number", "minimum": 0, "maximum": 1},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "spuriousGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value_sigma", "maximum_sigma", "passed"],
+      "properties": {
+        "value_sigma": {"type": ["number", "null"], "minimum": 0},
+        "maximum_sigma": {"type": "number", "exclusiveMinimum": 0},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "gateSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mc_spearman",
+        "data_sideband_spearman",
+        "sideband_acceptance",
+        "spurious_signal",
+        "all_passed"
+      ],
+      "properties": {
+        "mc_spearman": {"$ref": "#/$defs/correlationGate"},
+        "data_sideband_spearman": {"$ref": "#/$defs/correlationGate"},
+        "sideband_acceptance": {"$ref": "#/$defs/acceptanceGate"},
+        "spurious_signal": {"$ref": "#/$defs/spuriousGate"},
+        "all_passed": {"type": "boolean"}
+      }
+    }
+  }
+}

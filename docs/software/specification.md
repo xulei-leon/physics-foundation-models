@@ -90,6 +90,7 @@ particleml analysis authorize
 particleml analysis observed --freeze PATH --authorization PATH --unblind
 particleml fit expected
 particleml report build
+particleml demo run --output PATH
 particleml contracts validate
 ```
 

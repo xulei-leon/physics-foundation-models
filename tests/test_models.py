@@ -11,7 +11,13 @@ from xgboost import XGBClassifier
 from particleml.config import load_config
 from particleml.contracts import ContractError
 from particleml.models import (
+    BASELINE_MODEL,
+    CONTROL_MODELS,
     FORMAL_SEEDS,
+    MODEL_NAMES,
+    MODEL_ROLES,
+    PRIMARY_MODEL,
+    TUNED_MODELS,
     build_model,
     ensemble_predictions,
     train_seeded_predictions,
@@ -20,6 +26,20 @@ from particleml.models import (
 from .helpers import synthetic_event_frame
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_model_roles_are_fixed_for_the_comparative_study() -> None:
+    assert MODEL_NAMES == ("cut_based", "logistic", "xgboost", "mlp")
+    assert BASELINE_MODEL == "cut_based"
+    assert PRIMARY_MODEL == "xgboost"
+    assert CONTROL_MODELS == ("logistic", "mlp")
+    assert TUNED_MODELS == ("logistic", "xgboost", "mlp")
+    assert MODEL_ROLES == {
+        "cut_based": "baseline",
+        "logistic": "linear_control",
+        "xgboost": "primary",
+        "mlp": "nonlinear_control",
+    }
 
 
 def _test_config() -> dict[str, object]:
@@ -42,6 +62,7 @@ def test_xgboost_runtime_comes_from_frozen_config() -> None:
     assert isinstance(model, XGBClassifier)
     assert model.get_params()["device"] == "cuda"
     assert model.get_params()["tree_method"] == "hist"
+    assert model.get_params()["min_child_weight"] == 0.01
 
     models = config["models"]
     assert isinstance(models, dict)
@@ -62,6 +83,8 @@ def test_all_model_paths_produce_aligned_five_seed_ensemble(model_name: str) -> 
     assert ensemble["event_id"].tolist() == features.event_ids.tolist()
     assert ensemble["seed_or_ensemble"].eq("ensemble").all()
     assert ensemble["raw_score"].between(0.0, 1.0).all()
+    if model_name == PRIMARY_MODEL:
+        assert ensemble["raw_score"].nunique() > 1
 
 
 def test_seeded_logistic_training_is_reproducible() -> None:

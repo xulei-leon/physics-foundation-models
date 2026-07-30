@@ -66,6 +66,7 @@ ANALYSIS_SPEC: dict[str, object] = {
             "subsample": None,
             "colsample_bytree": None,
             "reg_lambda": None,
+            "min_child_weight": None,
         },
         "mlp": {
             "hidden_layer_sizes": None,

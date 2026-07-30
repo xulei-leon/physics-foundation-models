@@ -260,7 +260,7 @@ cd "$PARTICLEML_HOST_ROOT"
 
 export PARTICLEML_HOST_UID="$(id -u)"
 export PARTICLEML_HOST_GID="$(id -g)"
-export PARTICLEML_DEV_IMAGE=particleml-jetson-dev:0.3.0
+export PARTICLEML_DEV_IMAGE=particleml-jetson-dev:0.4.0
 export JETSON_PYTORCH_IMAGE=nvcr.io/nvidia/pytorch:25.06-py3-igpu
 
 test "$PARTICLEML_HOST_UID" -gt 0
@@ -287,6 +287,10 @@ the 8 GB board. This avoids a GitHub clone during the image build. A missing
 without changing JetPack.
 
 Inspect the resulting image:
+
+The image listing below is the preserved, manually verified `0.3.0` baseline.
+Do not reuse its image ID as evidence for the `0.4.0` build; record the ID
+reported by the new build.
 
 ```bash
 $ sudo docker image ls
@@ -351,6 +355,9 @@ It does not publish ports or mount host system directories beyond the GPU
 devices and driver libraries injected by the NVIDIA Container Toolkit.
 
 Confirm the mounts, limits, and non-root user:
+
+This container listing is also preserved from the manually verified `0.3.0`
+baseline. A `0.4.0` verification must use the newly created container output.
 
 ```bash
 $ sudo docker container ls
@@ -424,7 +431,12 @@ import json
 import numpy as np
 from xgboost import XGBClassifier
 
-model = XGBClassifier(tree_method="hist", device="cuda", n_estimators=1)
+model = XGBClassifier(
+    tree_method="hist",
+    device="cuda",
+    n_estimators=1,
+    min_child_weight=0.01,
+)
 model.fit(np.array([[0.0], [1.0]]), np.array([0, 1]))
 device = json.loads(model.get_booster().save_config())["learner"]["generic_param"]["device"]
 assert device in {"cuda", "cuda:0"}, device
@@ -434,9 +446,11 @@ PY
 XGBoost CUDA device: cuda:0
 ```
 
-This check matches the committed formal XGBoost device and tree method.
-Changing either setting requires a new reviewed configuration and new
-artifacts.
+This check matches the committed formal XGBoost device, tree method, and
+`min_child_weight`. The value `0.01` is required because class-normalized
+training weights sum to 0.5 per class; the default can prevent tree splits at
+that scale. Changing these settings requires a new reviewed configuration and
+new artifacts.
 
 ## 7. Verify the container environment
 
@@ -461,18 +475,19 @@ study-result
 analysis-freeze
 unblinding-authorization
 fit-result
+demo-summary
 
 $ python -m pytest -q -o cache_dir="$PARTICLEML_PYTEST_CACHE" tests/test_config.py tests/test_contracts.py
 17 passed in 0.48s
 
 $ python -m pytest -q -o cache_dir="$PARTICLEML_PYTEST_CACHE"
-76 passed, 15 warnings in 20.31s
+83 passed
 
 $ python -m ruff check src/particleml scripts tests
 All checks passed!
 
 $ python -m mypy --cache-dir="$PARTICLEML_MYPY_CACHE" src/particleml
-Success: no issues found in 22 source files
+Success: no issues found in 23 source files
 
 $ python scripts/validate_software_docs.py
 documentation validation passed (7 checks)
@@ -642,7 +657,7 @@ sudo docker buildx build \
   --build-arg HOST_UID="$(id -u)" \
   --build-arg HOST_GID="$(id -g)" \
   --file docker/jetson-dev/Dockerfile \
-  --tag particleml-jetson-dev:0.3.0 \
+  --tag particleml-jetson-dev:0.4.0 \
   .
 ```
 

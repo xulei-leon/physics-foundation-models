@@ -26,11 +26,19 @@ def weighted_metrics(
     if set(target.tolist()) != {0, 1}:
         raise ContractError("METRIC_CLASS", "both target classes are required")
     absolute = np.abs(weights)
+    if any(float(np.sum(absolute[target == label])) <= 0 for label in (0, 1)):
+        raise ContractError("METRIC_WEIGHT", "both target classes require positive total weight")
     roc_auc = float(roc_auc_score(target, score, sample_weight=absolute))
     pr_auc = float(average_precision_score(target, score, sample_weight=absolute))
     false_positive, true_positive, _ = roc_curve(target, score, sample_weight=absolute)
     index = int(np.argmin(np.abs(true_positive - 0.5)))
-    rejection = float("inf") if false_positive[index] == 0 else float(1.0 / false_positive[index])
+    positive_false_positive = false_positive[false_positive > 0]
+    efficiency = (
+        float(false_positive[index])
+        if false_positive[index] > 0
+        else float(np.min(positive_false_positive))
+    )
+    rejection = 1.0 / efficiency
     return {
         "weighted_roc_auc": roc_auc,
         "weighted_pr_auc": pr_auc,

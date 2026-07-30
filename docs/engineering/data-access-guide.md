@@ -38,7 +38,9 @@ particleml dataset build \
 
 The builder streams ROOT chunks, validates required branches, converts MeV to
 GeV, runs selection and pairing, computes weights and split identity, and
-publishes Parquet partitions plus a dataset manifest.
+publishes the canonical event-level Parquet partitions plus a dataset manifest.
+Models and studies consume this event-level Parquet dataset rather than
+re-reading ROOT.
 
 ## Data audit
 
@@ -52,3 +54,16 @@ The audit checks checksum lineage, event uniqueness, unit ranges, cutflow
 monotonicity, data target nullness, simulation metadata, split disjointness,
 and process coverage. Passing the audit permits training; it does not permit
 unblinding.
+
+## Offline Demo inputs
+
+`particleml demo run` creates 12 deterministic local ROOT sources: one
+signal, irreducible-background, reducible-background, and pseudo-data file for
+each of `4e`, `4mu`, and `2e2mu`. Every source file has its own SHA-256
+checksum, and the generated catalog hash binds those file records before the
+normal ingestion path runs.
+
+Pseudo-data are ingested in sideband-only mode. Events in `[120,130)` GeV are
+removed, `target` remains null, and no `w_train` value is assigned. The Demo
+therefore exercises the data-sideband path without creating a training or
+observed-data input.

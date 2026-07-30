@@ -32,7 +32,7 @@ flowchart LR
 | `weights` | signed yield weights and absolute class-normalized train weights |
 | `splits` | deterministic identity and per-dataset hash buckets |
 | `features` | frozen dimensionless features and forbidden-field enforcement |
-| `models` | four model families, configured CUDA XGBoost, five seeds, prediction alignment |
+| `models` | fixed model roles, four model families, configured CUDA XGBoost, five seeds, prediction alignment |
 | `tuning` | bounded validation-only candidate evaluation and decision |
 | `decorrelation` | conditional CDF, adaptive bins, sculpting gates |
 | `inference` | templates, non-positive-bin merging, pyhf workspace and fit |
@@ -42,7 +42,14 @@ flowchart LR
 | `artifacts` | canonical hashing and atomic publication |
 | `contracts` | Draft 2020-12 schema and strict YAML validation |
 | `reporting` | blinded, artifact-derived Markdown report |
+| `demo` | deterministic synthetic ROOT generation and non-formal offline report |
 | `cli` | breaking v2 command orchestration |
+
+XGBoost is the primary model component inside this shared dataflow. It does not
+own a separate ingestion, feature, weighting, decorrelation, or inference path.
+The cut-based path is the primary baseline; Logistic Regression and MLP are
+controls. Their results are retained, but they do not authorize or block
+observed processing.
 
 ## Trust boundaries
 

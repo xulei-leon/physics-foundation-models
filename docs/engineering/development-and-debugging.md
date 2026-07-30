@@ -41,10 +41,10 @@ ubuntu@leon-orin:/workspace/particleML$ python -m ruff check src/particleml scri
 All checks passed!
 
 ubuntu@leon-orin:/workspace/particleML$ python -m mypy --cache-dir="$PARTICLEML_MYPY_CACHE" src/particleml
-Success: no issues found in 22 source files
+Success: no issues found in 23 source files
 
 ubuntu@leon-orin:/workspace/particleML$ python -m pytest -q -o cache_dir="$PARTICLEML_PYTEST_CACHE"
-76 passed, 15 warnings in 20.23s
+83 passed
 
 ubuntu@leon-orin:/workspace/particleML$ python scripts/validate_software_docs.py
 documentation validation passed (7 checks)
@@ -57,14 +57,31 @@ Tests use generated ROOT and Parquet fixtures and must not require network
 access. A network-dependent test belongs in an explicitly marked integration
 profile, not the default suite.
 
+The complete portable pipeline can also be exercised offline:
+
+```bash
+particleml demo run --output "$PARTICLEML_RUNTIME/artifacts/synthetic-demo"
+```
+
+This command uses deterministic synthetic inputs and XGBoost
+`device: cpu`/`tree_method: hist`. It does not validate the formal Jetson
+CUDA path or produce an analysis-freeze input.
+
 ## Failure classes
 
 - `ContractError`: invalid schema, unknown config key, prohibited field, missing
-  metadata, or blinding refusal. Fix the input or protocol.
+  metadata, blinding refusal, or a wrapped pyhf optimizer failure. A pyhf
+  `FailedMinimization` is reported as `FIT_MINIMIZATION`; the affected fit is
+  blocked and the original failure remains in the run diagnostics.
 - `IntegrityError`: checksum, hash, duplicate event, stale artifact, or atomic
   publication failure. Do not reuse the output.
 - `PhysicsError`: no valid pairing, inconsistent units, non-finite kinematics,
   or selection invariant violation.
+
+If XGBoost produces constant scores or trees without splits, first confirm the
+training weights are the required absolute class-normalized `w_train`. Each
+class sums to 0.5, so the committed `min_child_weight: 0.01` is intentional;
+XGBoost's default threshold is too large for that normalized scale.
 
 Do not work around a failed gate by changing a threshold after looking at test
 or signal-window data. Update the research plan first and create a new plan

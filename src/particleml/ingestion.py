@@ -390,5 +390,5 @@ def publish_canonical_dataset(
         validator,
         {"catalog_sha256": catalog_sha256},
         config_sha256,
-        "particleml-0.3.0",
+        "particleml-0.4.0",
     )

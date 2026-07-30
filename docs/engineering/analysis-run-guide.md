@@ -23,9 +23,10 @@ study-result
 analysis-freeze
 unblinding-authorization
 fit-result
+demo-summary
 
 ubuntu@leon-orin:/workspace/particleML$ python -m pytest -q -o cache_dir="$PARTICLEML_PYTEST_CACHE"
-76 passed, 15 warnings in 20.35s
+83 passed
 
 ubuntu@leon-orin:/workspace/particleML$ python scripts/validate_software_docs.py
 documentation validation passed (7 checks)
@@ -39,6 +40,19 @@ produce or validate a physics result.
 The committed analysis configuration uses CUDA-enabled XGBoost with
 `tree_method: hist` and `device: cuda` in the verified Jetson container. Run
 the formal sequence with that reviewed configuration exactly as written.
+
+The study is a fixed comparison, not a model-plugin platform. `cut_based` is
+the primary physics baseline, `xgboost` is the primary research model,
+`logistic` is the linear control, and `mlp` is the nonlinear control. The
+primary endpoint is the DDT-transformed XGBoost ensemble expected
+profile-likelihood significance minus the corresponding cut-based value.
+
+All models share the same selected events, frozen features, deterministic
+70/10/10/10 train/calibration/validation/test split, absolute
+class-normalized training weights, signed yield weights, five seeds, DDT
+calibration, templates, and expected fits. Because normalization gives each
+training class total weight 0.5, XGBoost uses `min_child_weight: 0.01`; the
+default value can prevent any tree split at this weight scale.
 
 All analysis inputs are obtained by direct HTTPS and verified against size,
 Adler-32, and SHA-256 before ROOT access. The catalog command resolves only the
@@ -81,6 +95,17 @@ factor of ten, and produces expected fits and generator-replacement
 diagnostics. Alternative generators never enter nominal training or nominal
 yields.
 
+Classification metrics use nominal test simulation and absolute weights. If
+the measured false-positive rate at the point nearest 50% signal efficiency is
+zero, the reported background rejection uses the smallest positive empirical
+false-positive rate so the metric remains finite and JSON-safe.
+
+An expected pyhf optimizer failure is recorded as `FIT_MINIMIZATION`; the
+affected run remains blocked with no expected significance. Ensemble nuisance
+diagnostics are separate: if a leave-one-nuisance-out diagnostic fails after
+the main fit succeeds, its diagnostic status is `blocked` without erasing the
+successful main fit.
+
 The study may complete with failed scientific gates so that failures remain
 auditable. A failed gate prevents the next command.
 
@@ -94,6 +119,9 @@ particleml analysis freeze \
   --inputs "$PARTICLEML_RUNTIME/artifacts" \
   --output "$PARTICLEML_RUNTIME/artifacts/freeze.json"
 ```
+
+Passing a synthetic Demo artifact directory as `--inputs` is rejected with
+`FREEZE_DEMO`.
 
 The freeze records raw values and thresholds for the five XGBoost seeds, the
 XGBoost ensemble, and the cut-based ensemble. It binds hashes for the

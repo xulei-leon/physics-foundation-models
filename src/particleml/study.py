@@ -26,7 +26,14 @@ from .inference import (
     fit_workspace,
     spurious_signal_sigma,
 )
-from .models import FORMAL_SEEDS, MODEL_NAMES, save_seeded_models, train_seeded_models
+from .models import (
+    BASELINE_MODEL,
+    FORMAL_SEEDS,
+    MODEL_NAMES,
+    PRIMARY_MODEL,
+    save_seeded_models,
+    train_seeded_models,
+)
 from .tuning import apply_tuning_decision
 
 
@@ -295,10 +302,20 @@ def run_blinded_study(
                     }
                 )
                 if label == "ensemble":
-                    run_summary["nuisance_diagnostics"] = _diagnostic_fits(
-                        cast(Mapping[str, Mapping[str, object]], templates),
-                        effective,
-                    )
+                    try:
+                        diagnostic_fits = _diagnostic_fits(
+                            cast(Mapping[str, Mapping[str, object]], templates),
+                            effective,
+                        )
+                        run_summary["nuisance_diagnostics"] = {
+                            "status": "completed",
+                            "fits": diagnostic_fits,
+                        }
+                    except ContractError as exc:
+                        run_summary["nuisance_diagnostics"] = {
+                            "status": "blocked",
+                            "error": {"code": exc.code, "message": exc.message},
+                        }
                 template_paths[f"{model_name}-{label}"] = template_path
                 fit_paths[f"{model_name}-{label}"] = fit_path
             except ContractError as exc:
@@ -320,11 +337,11 @@ def run_blinded_study(
             key = f"{model_name}-{label}"
             prediction_paths[key] = prediction_path
             ddt_paths[key] = calibration_path
-            if model_name == "xgboost" or (
-                model_name == "cut_based" and label == "ensemble"
+            if model_name == PRIMARY_MODEL or (
+                model_name == BASELINE_MODEL and label == "ensemble"
             ):
                 gate_sets[key] = gates
-            if model_name == "xgboost" and label == "ensemble":
+            if model_name == PRIMARY_MODEL and label == "ensemble":
                 xgboost_ensemble = transformed
                 xgboost_calibrator = calibrator
         if seed_significance_values:
@@ -360,10 +377,10 @@ def run_blinded_study(
             ].dropna()
         }
     )
-    nominal_value = study_models["xgboost"]["runs"]["ensemble"][
+    nominal_value = study_models[PRIMARY_MODEL]["runs"]["ensemble"][
         "expected_significance"
     ]
-    cut_value = study_models["cut_based"]["runs"]["ensemble"][
+    cut_value = study_models[BASELINE_MODEL]["runs"]["ensemble"][
         "expected_significance"
     ]
     nominal_significance = None if nominal_value is None else float(nominal_value)
@@ -427,7 +444,7 @@ def run_blinded_study(
     _write_json(
         software_path,
         {
-            "particleml_version": "0.3.0",
+            "particleml_version": "0.4.0",
             "python_version": platform.python_version(),
             "git_commit": git_commit,
         },

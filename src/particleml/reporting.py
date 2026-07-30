@@ -83,5 +83,5 @@ def build_blinded_report(
         validator,
         input_hashes,
         config_sha256,
-        "particleml-0.3.0",
+        "particleml-0.4.0",
     )
