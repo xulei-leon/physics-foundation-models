@@ -19,7 +19,7 @@ Add one pure dataset helper; do not create a new audit subsystem.
 ## 1. Sprint objective
 
 Implement the grouped simulation-weight portion of
-[FR-001 Non-blocking Analysis Diagnostics](../1-Requirement/FR-001-reference-demo-diagnostics.md).
+[FR-001 Non-blocking Analysis Diagnostics](../../1-Requirement/Done/FR-001-reference-demo-diagnostics.md).
 
 Core objectives:
 
@@ -29,7 +29,7 @@ Core objectives:
 
 ## 2. Prerequisites
 
-- [Reference Demo Diagnostics Adaptation Plan](2026-07-30-reference-demo-diagnostics-plan.md),
+- [Reference Demo Diagnostics Adaptation Plan](../2026-07-30-reference-demo-diagnostics-plan.md),
   section D1.
 - Existing canonical-frame audit and CLI data-audit implementation.
 - Software Requirements 2.1.0: `DATA-004`, `DATA-005`, and `CLI-001`.

@@ -20,7 +20,7 @@ predictions and existing run records.
 ## 1. Sprint objective
 
 Implement the weighted raw-score portion of
-[FR-001 Non-blocking Analysis Diagnostics](../1-Requirement/FR-001-reference-demo-diagnostics.md).
+[FR-001 Non-blocking Analysis Diagnostics](../../1-Requirement/Done/FR-001-reference-demo-diagnostics.md).
 
 Core objectives:
 
@@ -32,7 +32,7 @@ Core objectives:
 ## 2. Prerequisites
 
 - Completed [Sprint M1-01](sprint-m1-01.md).
-- [Reference Demo Diagnostics Adaptation Plan](2026-07-30-reference-demo-diagnostics-plan.md),
+- [Reference Demo Diagnostics Adaptation Plan](../2026-07-30-reference-demo-diagnostics-plan.md),
   section D2.
 - Existing aligned raw predictions, fixed model roles, study orchestration, and
   study-result schema.

@@ -5,15 +5,15 @@
 - `Phase`: Phase 1 - Analysis diagnostics and auditability
 - `Development order`: 1
 - `Priority`: P1
-- `Status`: In progress
+- `Status`: Complete
 - `Prerequisites`: `DATA-005`, `MODEL-002`, `DDT-002`, and `DEMO-001`
 - `Affected packages`: `src/particleml`, `schemas`, `tests`, and analysis documentation
 - `Prototype phase`: No
 - `Source type`: Design strengthening
 - `Original SRS section`: Software Requirements 2.1.0 (`DATA-005`, `MODEL-002`, `DEMO-001`)
-- `Delivery Sprints`: [M1-01](../3-Plan/sprint-m1-01.md),
-  [M1-02](../3-Plan/sprint-m1-02.md), and
-  [M1-03](../3-Plan/sprint-m1-03.md)
+- `Delivery Sprints`: [M1-01](../../3-Plan/Done/sprint-m1-01.md),
+  [M1-02](../../3-Plan/Done/sprint-m1-02.md), and
+  [M1-03](../../3-Plan/Done/sprint-m1-03.md)
 
 ## Goal
 
@@ -34,7 +34,7 @@ adopting its split, features, weighting, threshold optimization, training, or
 real-data plotting choices.
 
 The source adaptation proposal is
-[Reference Demo Diagnostics Adaptation Plan](../3-Plan/2026-07-30-reference-demo-diagnostics-plan.md).
+[Reference Demo Diagnostics Adaptation Plan](../../3-Plan/2026-07-30-reference-demo-diagnostics-plan.md).
 This FR converts that proposal into an implementation requirement while
 preserving the current scientific contracts.
 
@@ -219,5 +219,7 @@ observed workspace, or freeze input is produced.
 - Training progress output remains deferred. If measured Jetson runtime later
   justifies it, define a separate requirement for outer model/seed progress
   without validation metrics or an XGBoost callback.
-- Current workflow phase: FR and three Sprint documents authored;
-  implementation has not started.
+- Completed by sequential Sprint commits `2783b10` (M1-01) and `7d463dc`
+  (M1-02), followed by the reviewed M1-03 full offline regression. The final
+  complete suite passed 112 tests; portable host evidence does not replace
+  formal Jetson CUDA/hist validation.
