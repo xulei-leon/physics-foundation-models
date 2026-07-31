@@ -12,7 +12,7 @@ Add one pure dataset helper; do not create a new audit subsystem.
 
 **Tech stack:** Python 3.10-3.12, pandas, pytest.
 
-**Status:** Ready - document authoring complete; implementation not started.
+**Status:** Complete - implementation, reviews, and focused verification passed.
 
 **Estimated effort:** 2-3 active hours.
 
@@ -36,10 +36,20 @@ Core objectives:
 
 Workflow resolution:
 
-- `FR_DIR=project/1-Requirement` and `SPRINT_DIR=project/3-Plan` are explicitly
-  selected by the user.
-- No review directory or persistent workflow-state file is requested.
-- Verification commands are derived from the source adaptation plan and
+- `FR_DIR=project/1-Requirement`,
+  `FR_BACKLOG_DIR=project/1-Requirement/backlog`, and
+  `FR_DONE_DIR=project/1-Requirement/Done` are resolved from the repository
+  layout.
+- `DESIGN_DIR=docs/software` is the active architecture and software-contract
+  source; `SPRINT_DIR=project/3-Plan` and
+  `SPRINT_DONE_DIR=project/3-Plan/Done` are resolved from the repository
+  layout.
+- `REVIEW_DIR=docs/4-Reviews` and `REVIEW_DONE_DIR=docs/4-Reviews/Done` use the
+  review-workflow fallback because the repository has no existing review
+  directory.
+- `WORKFLOW_STATE_PATH` is unset because no persistent workflow-state file was
+  requested.
+- `VERIFICATION_COMMANDS` are derived from the source adaptation plan and
   narrowed to the files touched by this Sprint.
 
 ## 3. Included scope
@@ -47,6 +57,7 @@ Workflow resolution:
 - `src/particleml/dataset.py`: one pure grouped summary helper.
 - `src/particleml/cli.py`: `simulation_weight_groups` in data-audit JSON.
 - `tests/test_ingestion.py`: focused grouping and contract coverage.
+- `tests/test_cli.py`: user-facing audit JSON command-path coverage.
 - `docs/engineering/data-access-guide.md`: field definitions and interpretation.
 
 ## 4. Out of scope
@@ -63,25 +74,30 @@ Workflow resolution:
 
 Implementation tasks:
 
-- [ ] Add a focused failing fixture with positive and negative nominal weights,
-  a generator variation, multiple datasets and splits, and a data row.
-- [ ] Add one pure helper that consumes an already audited canonical frame.
-- [ ] Exclude data and group by `dataset_id`, `process_group`, `sample_role`,
+- [x] Add a focused failing fixture with positive and negative nominal weights,
+  a generator variation, multiple datasets, at least two process groups,
+  multiple splits, and a data row.
+- [x] Add one pure helper that consumes an already audited canonical frame.
+- [x] Exclude data and group by `dataset_id`, `process_group`, `sample_role`,
   and `split`.
-- [ ] Emit `events`, `negative_events`, `negative_fraction`, `sum_w_yield`,
+- [x] Emit `events`, `negative_events`, `negative_fraction`, `sum_w_yield`,
   and `sum_abs_w_yield` with finite values and deterministic ordering.
-- [ ] Preserve signed `w_yield`; use `abs(w_yield)` only for the absolute sum.
-- [ ] Keep nominal and generator-variation samples distinguishable.
-- [ ] Do not mutate the input or recompute `w_train`.
-- [ ] Add the result to `_audit_data` as `simulation_weight_groups`.
-- [ ] Keep `audit_frame` unchanged.
-- [ ] Document that the fields are diagnostics, not rescaling inputs.
+- [x] Preserve signed `w_yield`; use `abs(w_yield)` only for the absolute sum.
+- [x] Keep nominal and generator-variation samples distinguishable.
+- [x] Do not mutate the input or recompute `w_train`.
+- [x] Add the result to `_audit_data` as `simulation_weight_groups`.
+- [x] Add a CLI-level regression that asserts the printed audit JSON contains
+  the deterministic grouped result.
+- [x] Keep `audit_frame` unchanged.
+- [x] Document that the fields are diagnostics, not rescaling inputs.
 
 Test requirements:
 
-- [ ] Assert exact counts, signed sums, absolute sums, and negative fractions.
-- [ ] Assert deterministic group ordering and complete data exclusion.
-- [ ] Retain existing non-finite-weight and data-training-weight failures.
+- [x] Assert exact counts, signed sums, absolute sums, and negative fractions.
+- [x] Assert deterministic group ordering and complete data exclusion.
+- [x] Assert otherwise distinct signal and background process groups remain
+  separate.
+- [x] Retain existing non-finite-weight and data-training-weight failures.
 
 ## 6. Acceptance criteria
 
@@ -97,9 +113,10 @@ Test requirements:
 Run:
 
 ```bash
-python -m pytest -q tests/test_ingestion.py
-python -m ruff check src/particleml/dataset.py src/particleml/cli.py tests/test_ingestion.py
+python -m pytest -q tests/test_ingestion.py tests/test_cli.py
+python -m ruff check src/particleml/dataset.py src/particleml/cli.py tests/test_ingestion.py tests/test_cli.py
 python -m mypy src/particleml
+particleml contracts validate
 python scripts/validate_software_docs.py
 git diff --check
 ```
@@ -112,7 +129,9 @@ Do not run the full Demo or complete pytest suite in this Sprint.
 2. Implement the pure summary helper.
 3. Expose it through the existing CLI JSON object.
 4. Update the data-access guide.
-5. Run focused verification and record results.
+5. Run focused verification and record commands, results, environment, and
+   remaining risks in this Sprint's delivery conclusion and code-review-confirm
+   document.
 6. Mark M1-01 complete before starting M1-02.
 
 ## 9. Risk control
@@ -125,4 +144,25 @@ Do not run the full Demo or complete pytest suite in this Sprint.
 
 ## 10. Delivery conclusion
 
-Pending implementation and focused verification.
+Complete on 2026-07-31 in the Windows Python 3.12 project `.venv`. The
+document review and code review were each completed with the user-requested
+single `gpt-5.5` reviewer; confirmations are retained under
+`docs/4-Reviews/`.
+
+Verification evidence:
+
+- `.\.venv\Scripts\python.exe -m pytest -q tests/test_ingestion.py tests/test_cli.py`:
+  passed, 9 tests.
+- `.\.venv\Scripts\python.exe -m ruff check src/particleml/dataset.py src/particleml/cli.py tests/test_ingestion.py tests/test_cli.py`:
+  passed.
+- `.\.venv\Scripts\python.exe -m mypy src/particleml`: passed, 23 source
+  files checked.
+- `.\.venv\Scripts\particleml.exe contracts validate`: passed, 12 contract
+  schemas/configurations validated.
+- `.\.venv\Scripts\python.exe scripts/validate_software_docs.py`: passed,
+  7 checks.
+- `git diff --check`: passed.
+
+No open M1-01 blocker remains. These portable host checks make no formal
+Jetson CUDA validation claim, and no full Demo or complete pytest run was
+performed in this Sprint.

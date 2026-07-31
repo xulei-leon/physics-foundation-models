@@ -13,6 +13,8 @@ from .artifacts import verify_artifact
 from .contracts import ContractError, validate_document
 from .splits import SPLITS
 
+SIMULATION_WEIGHT_GROUP_KEYS = ("dataset_id", "process_group", "sample_role", "split")
+
 
 def load_dataset(path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Verify and load a published canonical dataset."""
@@ -24,6 +26,45 @@ def load_dataset(path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     if len(frame) != int(manifest["row_count"]):
         raise ContractError("DATASET_ROWS", "manifest and Parquet row counts differ")
     return frame, manifest
+
+
+def summarize_simulation_weights(frame: pd.DataFrame) -> list[dict[str, object]]:
+    """Summarize signed and absolute simulation weights by canonical group."""
+
+    required = {*SIMULATION_WEIGHT_GROUP_KEYS, "is_data", "w_yield"}
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise ContractError("AUDIT_COLUMNS", f"missing columns: {', '.join(missing)}")
+
+    simulation = frame.loc[
+        ~frame["is_data"].astype(bool), [*SIMULATION_WEIGHT_GROUP_KEYS, "w_yield"]
+    ].copy()
+    if not all(math.isfinite(float(value)) for value in simulation["w_yield"]):
+        raise ContractError("AUDIT_WEIGHT", "w_yield contains a non-finite value")
+
+    summaries: list[dict[str, object]] = []
+    groups = simulation.groupby(
+        list(SIMULATION_WEIGHT_GROUP_KEYS), sort=True, dropna=False, observed=True
+    )
+    for group_key, group in groups:
+        weights = [float(value) for value in group["w_yield"]]
+        sum_w_yield = math.fsum(weights)
+        sum_abs_w_yield = math.fsum(abs(value) for value in weights)
+        if not math.isfinite(sum_w_yield) or not math.isfinite(sum_abs_w_yield):
+            raise ContractError("AUDIT_WEIGHT", "grouped w_yield sum is non-finite")
+        negative_events = sum(value < 0.0 for value in weights)
+        events = len(weights)
+        summaries.append(
+            {
+                **dict(zip(SIMULATION_WEIGHT_GROUP_KEYS, map(str, group_key), strict=True)),
+                "events": events,
+                "negative_events": negative_events,
+                "negative_fraction": negative_events / events,
+                "sum_w_yield": sum_w_yield,
+                "sum_abs_w_yield": sum_abs_w_yield,
+            }
+        )
+    return summaries
 
 
 def audit_frame(frame: pd.DataFrame) -> dict[str, object]:

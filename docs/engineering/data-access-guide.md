@@ -55,6 +55,13 @@ monotonicity, data target nullness, simulation metadata, split disjointness,
 and process coverage. Passing the audit permits training; it does not permit
 unblinding.
 
+The printed JSON includes `simulation_weight_groups`, ordered by `dataset_id`,
+`process_group`, `sample_role`, and `split`. Each simulation-only group reports
+`events`, `negative_events`, `negative_fraction`, the signed `sum_w_yield`, and
+`sum_abs_w_yield`. Nominal and generator-variation samples remain separate,
+and data rows are excluded. These fields diagnose weight composition; they are
+not inputs for rescaling yields or recomputing `w_train`.
+
 ## Offline Demo inputs
 
 `particleml demo run` creates 12 deterministic local ROOT sources: one

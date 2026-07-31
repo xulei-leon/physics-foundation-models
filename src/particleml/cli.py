@@ -39,7 +39,7 @@ from .contracts import (
     validate_document,
     validate_schema_suite,
 )
-from .dataset import audit_frame, load_dataset
+from .dataset import audit_frame, load_dataset, summarize_simulation_weights
 from .decorrelation import DDTCalibrator, ddt_category, evaluate_decorrelation_gates
 from .demo import run_offline_demo
 from .evaluation import weighted_metrics
@@ -157,7 +157,9 @@ def _dataset_build(args: argparse.Namespace) -> None:
 def _audit_data(args: argparse.Namespace) -> None:
     load_config(args.config, "analysis")
     frame, _ = load_dataset(args.dataset)
-    print(json.dumps(audit_frame(frame), sort_keys=True))
+    audit = audit_frame(frame)
+    audit["simulation_weight_groups"] = summarize_simulation_weights(frame)
+    print(json.dumps(audit, sort_keys=True))
 
 
 def _training_writer(

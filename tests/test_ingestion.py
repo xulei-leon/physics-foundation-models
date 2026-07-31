@@ -5,18 +5,21 @@ from pathlib import Path
 
 import awkward as ak
 import numpy as np
+import pandas as pd
 import pytest
 import uproot
 
 from particleml.artifacts import verify_artifact
 from particleml.contracts import ContractError, sha256_file
-from particleml.dataset import audit_frame, load_dataset
+from particleml.dataset import audit_frame, load_dataset, summarize_simulation_weights
 from particleml.ingestion import (
     SourceDescriptor,
     ingest_sources,
     publish_canonical_dataset,
 )
 from particleml.physics import Selection
+
+from .helpers import synthetic_event_frame
 
 
 def _write_root(path: Path) -> None:
@@ -67,6 +70,127 @@ def _source(checksum: str, dataset: str, process: str, is_data: bool = False) ->
         filter_efficiency=None if is_data else 1.0,
         sum_of_generator_weights=None if is_data else 1.0,
     )
+
+
+def _simulation_weight_audit_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "dataset_id": "mc-signal",
+                "process_group": "signal",
+                "sample_role": "nominal",
+                "split": "test",
+                "is_data": False,
+                "w_yield": 2.0,
+                "w_train": 0.2,
+            },
+            {
+                "dataset_id": "mc-signal",
+                "process_group": "signal",
+                "sample_role": "generator_variation",
+                "split": "test",
+                "is_data": False,
+                "w_yield": -0.5,
+                "w_train": None,
+            },
+            {
+                "dataset_id": "mc-background",
+                "process_group": "irreducible_background",
+                "sample_role": "nominal",
+                "split": "train",
+                "is_data": False,
+                "w_yield": -2.0,
+                "w_train": 0.1,
+            },
+            {
+                "dataset_id": "mc-background",
+                "process_group": "irreducible_background",
+                "sample_role": "nominal",
+                "split": "train",
+                "is_data": False,
+                "w_yield": 1.0,
+                "w_train": 0.1,
+            },
+            {
+                "dataset_id": "data",
+                "process_group": "data",
+                "sample_role": "nominal",
+                "split": "data",
+                "is_data": True,
+                "w_yield": 1.0,
+                "w_train": None,
+            },
+        ]
+    )
+
+
+def test_simulation_weight_groups_are_signed_deterministic_and_data_free() -> None:
+    frame = _simulation_weight_audit_frame()
+    original = frame.copy(deep=True)
+
+    assert summarize_simulation_weights(frame) == [
+        {
+            "dataset_id": "mc-background",
+            "process_group": "irreducible_background",
+            "sample_role": "nominal",
+            "split": "train",
+            "events": 2,
+            "negative_events": 1,
+            "negative_fraction": 0.5,
+            "sum_w_yield": -1.0,
+            "sum_abs_w_yield": 3.0,
+        },
+        {
+            "dataset_id": "mc-signal",
+            "process_group": "signal",
+            "sample_role": "generator_variation",
+            "split": "test",
+            "events": 1,
+            "negative_events": 1,
+            "negative_fraction": 1.0,
+            "sum_w_yield": -0.5,
+            "sum_abs_w_yield": 0.5,
+        },
+        {
+            "dataset_id": "mc-signal",
+            "process_group": "signal",
+            "sample_role": "nominal",
+            "split": "test",
+            "events": 1,
+            "negative_events": 0,
+            "negative_fraction": 0.0,
+            "sum_w_yield": 2.0,
+            "sum_abs_w_yield": 2.0,
+        },
+    ]
+    pd.testing.assert_frame_equal(frame, original)
+
+
+def test_simulation_weight_groups_reject_non_finite_weights() -> None:
+    frame = _simulation_weight_audit_frame()
+    frame.loc[0, "w_yield"] = np.inf
+
+    with pytest.raises(ContractError, match="AUDIT_WEIGHT"):
+        summarize_simulation_weights(frame)
+
+
+def test_audit_frame_retains_weight_and_data_training_failures() -> None:
+    frame = synthetic_event_frame(8)
+    frame["sample_role"] = "nominal"
+    frame["region"] = "signal"
+
+    non_finite = frame.copy(deep=True)
+    non_finite.loc[0, "w_yield"] = np.inf
+    with pytest.raises(ContractError, match="AUDIT_WEIGHT"):
+        audit_frame(non_finite)
+
+    labeled_data = frame.copy(deep=True)
+    labeled_data.loc[0, "is_data"] = True
+    labeled_data.loc[0, "target"] = None
+    labeled_data.loc[0, "split"] = "data"
+    labeled_data.loc[0, "region"] = "sideband"
+    with pytest.raises(ContractError, match="AUDIT_DATA_LABEL"):
+        audit_frame(labeled_data)
 
 
 def test_root_to_parquet_pipeline_converts_units_and_isolates_data(tmp_path: Path) -> None:
