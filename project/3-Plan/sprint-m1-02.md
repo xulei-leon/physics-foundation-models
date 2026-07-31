@@ -13,7 +13,7 @@ predictions and existing run records.
 
 **Tech stack:** Python 3.10-3.12, NumPy, pytest, Draft 2020-12 JSON Schema.
 
-**Status:** Planned - starts after M1-01 completes.
+**Status:** Complete - implementation, reviews, and focused verification passed.
 
 **Estimated effort:** 3-4 active hours.
 
@@ -39,10 +39,19 @@ Core objectives:
 
 Workflow resolution:
 
-- `FR_DIR=project/1-Requirement` and `SPRINT_DIR=project/3-Plan` are explicitly
-  selected by the user.
-- No review directory or persistent workflow-state file is requested.
-- Verification commands are derived from the source adaptation plan and
+- `FR_DIR=project/1-Requirement`,
+  `FR_BACKLOG_DIR=project/1-Requirement/backlog`, and
+  `FR_DONE_DIR=project/1-Requirement/Done` are resolved from the repository
+  layout.
+- `DESIGN_DIR=docs/software` is the active architecture and software-contract
+  source; `SPRINT_DIR=project/3-Plan` and
+  `SPRINT_DONE_DIR=project/3-Plan/Done` are resolved from the repository
+  layout.
+- `REVIEW_DIR=docs/4-Reviews` and `REVIEW_DONE_DIR=docs/4-Reviews/Done` reuse
+  the review directory established by M1-01.
+- `WORKFLOW_STATE_PATH` is unset because no persistent workflow-state file was
+  requested.
+- `VERIFICATION_COMMANDS` are derived from the source adaptation plan and
   narrowed to evaluation, study, schema, and documentation changes.
 
 ## 3. Included scope
@@ -51,6 +60,8 @@ Workflow resolution:
 - `src/particleml/study.py`: seed and ensemble run-record integration.
 - `schemas/study-result.schema.json`: optional diagnostic object.
 - `tests/test_evaluation.py`: primitive, contract, and non-blocking tests.
+- `tests/test_study.py`: lightweight seed/ensemble run-record integration.
+- `tests/test_contracts.py`: positive and negative nested-schema validation.
 - `docs/research/model-selection.md`: diagnostic role.
 - `docs/software/specification.md`: input and output contract.
 - `docs/engineering/analysis-run-guide.md`: interpretation.
@@ -70,32 +81,45 @@ Workflow resolution:
 
 Implementation tasks:
 
-- [ ] Add failing tests for identical, disjoint, negative-weight, malformed,
+- [x] Add failing tests for identical, disjoint, negative-weight, malformed,
   non-finite, misaligned, empty-positive-weight, and shifted-shape cases.
-- [ ] Implement `weighted_ks_distance` for aligned one-dimensional arrays.
-- [ ] Use absolute weights, stable sorting, and right-continuous empirical CDFs.
-- [ ] Raise `ContractError` for malformed or non-finite inputs.
-- [ ] Add a minimal aligned-array helper for nominal simulation `target`,
-  `raw_score`, `split`, and `w_yield`.
-- [ ] Exclude data and generator variations.
-- [ ] Return `null` for one class only when train or test lacks positive
-  absolute weight.
-- [ ] Attach `raw_score_shape_diagnostics` to every seed and ensemble run for
+- [x] Implement `weighted_ks_distance` for aligned one-dimensional arrays.
+- [x] Use absolute weights, stable sorting, and right-continuous empirical CDFs.
+- [x] Raise `ContractError` for malformed or non-finite inputs.
+- [x] Make `weighted_ks_distance` reject either sample when its total absolute
+  weight is not positive.
+- [x] Add a prediction-frame adapter that explicitly filters
+  `is_data == false` and `sample_role == "nominal"`, then extracts aligned
+  `target`, `raw_score`, `split`, and `w_yield` arrays.
+- [x] Exclude data and generator variations before computing either class.
+- [x] Return `null` only for the affected class when its train or test sample
+  lacks positive absolute weight; still compute the other class when valid.
+- [x] Attach `raw_score_shape_diagnostics` to every seed and ensemble run for
   cut-based, Logistic Regression, XGBoost, and MLP.
-- [ ] Compute the record before DDT interpretation.
-- [ ] Extend only the optional study-result property and retain contract version
-  `2.1.0`.
-- [ ] Update the four scoped documentation files.
+- [x] Compute the record before DDT interpretation.
+- [x] Extend only the nested optional study-result property and retain contract
+  version `2.1.0`; validate constants, nullable `[0,1]` values, and reject extra
+  diagnostic fields.
+- [x] Update the four scoped documentation files.
 
 Test requirements:
 
-- [ ] Identical distributions return zero and disjoint distributions return one.
-- [ ] Negative weights contribute through their absolute values.
-- [ ] Invalid inputs fail closed with `ContractError`.
-- [ ] Diagnostic-only value changes cannot affect status, `blocking_reasons`,
+- [x] Identical distributions return zero and disjoint distributions return one.
+- [x] Negative weights contribute through their absolute values.
+- [x] A tied-score asymmetric-weight case proves right-continuous CDF semantics
+  and rejects accidental DDT-midrank reuse.
+- [x] Invalid inputs fail closed with `ContractError`.
+- [x] Data and generator-variation rows with extreme raw scores cannot affect
+  either class diagnostic.
+- [x] Positive and negative schema tests cover malformed values and forbidden
+  extra fields inside `raw_score_shape_diagnostics`.
+- [x] A lightweight study integration test covers all four model keys and
+  `seed-17`, `seed-42`, `seed-314`, `seed-2026`, `seed-2718`, plus `ensemble`
+  without running the full Demo.
+- [x] Diagnostic-only value changes cannot affect status, `blocking_reasons`,
   gate sets, expected significance, the primary comparison, or freeze
   eligibility.
-- [ ] Run-record fields contain no threshold, pass/fail, or blocking semantics.
+- [x] Run-record fields contain no threshold, pass/fail, or blocking semantics.
 
 ## 6. Acceptance criteria
 
@@ -112,8 +136,8 @@ Test requirements:
 Run:
 
 ```bash
-python -m pytest -q tests/test_evaluation.py
-python -m ruff check src/particleml/evaluation.py src/particleml/study.py tests/test_evaluation.py
+python -m pytest -q tests/test_evaluation.py tests/test_study.py tests/test_contracts.py
+python -m ruff check src/particleml/evaluation.py src/particleml/study.py tests/test_evaluation.py tests/test_study.py tests/test_contracts.py
 python -m mypy src/particleml
 particleml contracts validate
 python scripts/validate_software_docs.py
@@ -132,7 +156,9 @@ Do not run `tests/test_demo.py` or the complete pytest suite in this Sprint.
 4. Add non-blocking regression assertions.
 5. Update interpretation and debugging documentation.
 6. Run focused verification and record results.
-7. Mark M1-02 complete before starting M1-03.
+7. Record commands, results, environment, and remaining risks in this Sprint's
+   delivery conclusion and code-review-confirm document.
+8. Mark M1-02 complete before starting M1-03.
 
 ## 9. Risk control
 
@@ -145,4 +171,27 @@ Do not run `tests/test_demo.py` or the complete pytest suite in this Sprint.
 
 ## 10. Delivery conclusion
 
-Pending M1-01 completion, implementation, and focused verification.
+Complete on 2026-07-31 in the Windows Python 3.12 project `.venv`, after the
+M1-01 prerequisite commit `2783b10`. The user-requested single `gpt-5.5`
+document and code reviews, plus both point-by-point confirmations, are retained
+under `docs/4-Reviews/`.
+
+Verification evidence:
+
+- `.\.venv\Scripts\python.exe -m pytest -q tests/test_evaluation.py tests/test_study.py tests/test_contracts.py`:
+  passed, 38 tests.
+- `.\.venv\Scripts\python.exe -m ruff check src/particleml/evaluation.py src/particleml/study.py tests/test_evaluation.py tests/test_study.py tests/test_contracts.py`:
+  passed.
+- `.\.venv\Scripts\python.exe -m mypy src/particleml`: passed, 23 source
+  files checked.
+- `.\.venv\Scripts\particleml.exe contracts validate`: passed, 12 contract
+  schemas/configurations validated.
+- `.\.venv\Scripts\python.exe scripts/validate_software_docs.py`: passed,
+  7 checks.
+- `node --test`: passed, 3 tests.
+- `pnpm docs:build`: passed.
+- `git diff --check`: passed.
+
+No M1-02 blocker remains. The full Demo and complete pytest suite were not run
+and remain assigned to M1-03. These portable host checks make no formal Jetson
+CUDA validation claim.

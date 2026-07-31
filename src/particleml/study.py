@@ -18,7 +18,7 @@ from .contracts import (
     validate_document,
 )
 from .decorrelation import DDTCalibrator, ddt_category, evaluate_decorrelation_gates
-from .evaluation import weighted_metrics
+from .evaluation import raw_score_shape_diagnostics, weighted_metrics
 from .features import PRIMARY_FEATURES
 from .inference import (
     build_templates,
@@ -268,6 +268,7 @@ def run_blinded_study(
         ]
         predictions.append(("ensemble", ensemble))
         for label, raw_prediction in predictions:
+            shape_diagnostics = raw_score_shape_diagnostics(raw_prediction)
             transformed, calibrator = _apply_ddt(raw_prediction, effective)
             run_root = output / "runs" / model_name / label
             prediction_path = run_root / "predictions.parquet"
@@ -279,6 +280,7 @@ def run_blinded_study(
             run_summary: dict[str, Any] = {
                 "status": "completed",
                 "metrics": metrics,
+                "raw_score_shape_diagnostics": shape_diagnostics,
             }
             try:
                 templates, workspace, fit_result, spurious = _expected_bundle(

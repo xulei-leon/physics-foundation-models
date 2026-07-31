@@ -27,7 +27,7 @@
     "models": {
       "type": "object",
       "required": ["cut_based", "logistic", "xgboost", "mlp"],
-      "additionalProperties": {"type": "object"}
+      "additionalProperties": {"$ref": "#/$defs/model-result"}
     },
     "primary_comparison": {
       "oneOf": [
@@ -47,6 +47,44 @@
     "generator_diagnostics": {"type": "array", "items": {"type": "object"}}
   },
   "$defs": {
-    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "model-result": {
+      "type": "object",
+      "properties": {
+        "runs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "raw_score_shape_diagnostics": {
+                "$ref": "#/$defs/raw-score-shape-diagnostics"
+              }
+            }
+          }
+        }
+      }
+    },
+    "raw-score-shape-diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comparison",
+        "weighting",
+        "signal_weighted_ks",
+        "background_weighted_ks"
+      ],
+      "properties": {
+        "comparison": {"const": "train-vs-test"},
+        "weighting": {"const": "absolute-w_yield"},
+        "signal_weighted_ks": {"$ref": "#/$defs/nullable-ks"},
+        "background_weighted_ks": {"$ref": "#/$defs/nullable-ks"}
+      }
+    },
+    "nullable-ks": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "number", "minimum": 0.0, "maximum": 1.0}
+      ]
+    }
   }
 }

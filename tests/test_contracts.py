@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,31 @@ from particleml.contracts import (
 )
 
 ZERO_HASH = "0" * 64
+
+
+def _study_result_with_diagnostic() -> dict[str, object]:
+    diagnostic = {
+        "comparison": "train-vs-test",
+        "weighting": "absolute-w_yield",
+        "signal_weighted_ks": 0.25,
+        "background_weighted_ks": None,
+    }
+    model = {"runs": {"seed-17": {"raw_score_shape_diagnostics": diagnostic}}}
+    return {
+        "schema_version": "2.1.0",
+        "dataset_sha256": ZERO_HASH,
+        "tuning_sha256": ZERO_HASH,
+        "status": "completed",
+        "blocking_reasons": [],
+        "models": {
+            "cut_based": model,
+            "logistic": model,
+            "xgboost": model,
+            "mlp": model,
+        },
+        "primary_comparison": None,
+        "generator_diagnostics": [],
+    }
 
 
 def test_schema_suite_self_validates() -> None:
@@ -87,6 +113,40 @@ def test_prediction_schema_requires_exact_payload_fields() -> None:
     }
     with pytest.raises(ContractError, match="CONTRACT_VALIDATION"):
         validate_document(document, "prediction-metadata")
+
+
+def test_study_schema_accepts_raw_score_shape_diagnostics() -> None:
+    validate_document(_study_result_with_diagnostic(), "study-result")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("comparison", "validation-vs-test"),
+        ("weighting", "signed-w_yield"),
+        ("signal_weighted_ks", -0.1),
+        ("background_weighted_ks", 1.1),
+        ("threshold", 0.05),
+        ("passed", True),
+        ("blocking", False),
+    ],
+)
+def test_study_schema_rejects_malformed_shape_diagnostics(field: str, value: object) -> None:
+    document = deepcopy(_study_result_with_diagnostic())
+    models = document["models"]
+    assert isinstance(models, dict)
+    model = models["xgboost"]
+    assert isinstance(model, dict)
+    runs = model["runs"]
+    assert isinstance(runs, dict)
+    run = runs["seed-17"]
+    assert isinstance(run, dict)
+    diagnostic = run["raw_score_shape_diagnostics"]
+    assert isinstance(diagnostic, dict)
+    diagnostic[field] = value
+
+    with pytest.raises(ContractError, match="CONTRACT_VALIDATION"):
+        validate_document(document, "study-result")
 
 
 def test_all_schema_files_are_json_objects() -> None:

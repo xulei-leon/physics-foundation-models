@@ -20,6 +20,13 @@ All learned models use the same split, feature contract, training weights,
 seeds, and evaluation events. Raw scores are used only for classification
 metrics. The statistical fit consumes DDT categories.
 
+Every seed and ensemble run also records class-conditional, train-versus-test
+weighted KS distances for raw scores. The empirical CDFs use absolute
+`w_yield`; data and generator variations are excluded. These values are
+descriptive shape diagnostics without a threshold or pass/fail meaning. They
+do not select a model, trigger retuning, enter gate sets or blocking reasons,
+or affect expected significance and freeze eligibility.
+
 These are fixed components of one analysis, not independently configurable
 pipelines. XGBoost owns only model construction and scoring. Catalog,
 ingestion, selection, weights, features, DDT, templates, fitting, artifact

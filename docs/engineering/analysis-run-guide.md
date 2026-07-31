@@ -100,6 +100,14 @@ the measured false-positive rate at the point nearest 50% signal efficiency is
 zero, the reported background rejection uses the smallest positive empirical
 false-positive rate so the metric remains finite and JSON-safe.
 
+Each seed and ensemble run records `raw_score_shape_diagnostics` before DDT
+interpretation. Signal and background values compare nominal-simulation train
+and test shapes with absolute `w_yield`; a class-specific `null` means that its
+train or test sample has no positive absolute weight. There is deliberately no
+KS threshold. The values are for diagnosis and cannot change study status,
+blocking reasons, gate sets, expected significance, the primary comparison,
+or freeze eligibility.
+
 An expected pyhf optimizer failure is recorded as `FIT_MINIMIZATION`; the
 affected run remains blocked with no expected significance. Ensemble nuisance
 diagnostics are separate: if a leave-one-nuisance-out diagnostic fails after

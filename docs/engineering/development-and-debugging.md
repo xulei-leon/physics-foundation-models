@@ -78,6 +78,14 @@ CUDA path or produce an analysis-freeze input.
 - `PhysicsError`: no valid pairing, inconsistent units, non-finite kinematics,
   or selection invariant violation.
 
+Raw-score weighted-KS diagnostics fail with `ContractError` when score or
+weight arrays are non-numeric, non-finite, non-one-dimensional, misaligned, or
+when the primitive receives a sample with zero total absolute weight. The
+study-level adapter converts only an absent positive absolute train or test
+weight into a class-specific `null`; it still computes the other class when
+valid. Do not replace malformed inputs with `null` or add a diagnostic
+threshold to work around the failure.
+
 If XGBoost produces constant scores or trees without splits, first confirm the
 training weights are the required absolute class-normalized `w_train`. Each
 class sums to 0.5, so the committed `min_child_weight: 0.01` is intentional;

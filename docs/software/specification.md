@@ -55,6 +55,33 @@ Persisted predictions also retain dataset and sample-role metadata so nominal
 templates can exclude generator variations and generator-replacement
 diagnostics can replace exactly one declared nominal DSID.
 
+## Raw-score shape diagnostics
+
+For every fixed-model seed and ensemble, nominal simulation train and test
+`raw_score` distributions are compared separately for signal and background.
+Data and generator variations are filtered using `is_data` and `sample_role`
+before aligned `target`, `raw_score`, `split`, and signed `w_yield` values are
+extracted. The weighted empirical CDF uses `abs(w_yield)`, stable sorting, and
+right-continuous values at observed scores.
+
+The optional run-record object is:
+
+```json
+{
+  "raw_score_shape_diagnostics": {
+    "comparison": "train-vs-test",
+    "weighting": "absolute-w_yield",
+    "signal_weighted_ks": 0.0,
+    "background_weighted_ks": 0.0
+  }
+}
+```
+
+Each distance is in `[0,1]` or is `null` only when the corresponding class has
+no positive absolute train or test weight. Malformed, misaligned, or
+non-finite inputs are contract errors. The object has no threshold, pass/fail,
+blocking, tuning, or freeze semantics.
+
 ## XGBoost execution
 
 Formal XGBoost training uses `tree_method=hist` and `device=cuda` from the
